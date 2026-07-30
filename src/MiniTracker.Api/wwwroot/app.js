@@ -32,7 +32,9 @@ STATUSES.concat(TC_STATUSES).forEach(s => { CLASS_FOR[s.label] = s.cls; });
 /** Ranks statuses by how much attention an epic is getting — the rule the roll-up's 📍 uses. */
 const ACTIVITY = { "In Progress":5, "Vendor Test":4, "Under Review":3, "Refined":2, "Not Yet Started":1, "Done":0, "On Hold":0 };
 
-/** URL path to form page. Board views intentionally have no URL of their own. */
+/** Form pages, by URL. Everything else is a board view, which has its own URL shape — see
+ *  routePath() and readUrl(). Every screen is addressable, so the breadcrumb, the address bar and
+ *  the browser's back button always agree with each other. */
 const PAGES = { "/configure":"configure", "/add-epic":"add-epic", "/add-story":"add-story", "/edit-epic":"edit-epic" };
 const PATH_FOR = { configure:"/configure", "add-epic":"/add-epic", "add-story":"/add-story", "edit-epic":"/edit-epic" };
 
@@ -136,11 +138,24 @@ function renderMarkdown(src){
     }
   }
 
+  // "- [ ] AC1: …" and "- [x] …". Rendered as a real checkbox rather than the literal characters,
+  // and deliberately not clickable: these belong to the description file, whereas the tick-boxes
+  // elsewhere on the page are the story's tasks in BACKLOG.md. Two different things.
+  const TASK_ITEM = /^\[([ xX])\]\s+([\s\S]*)$/;
+
   let list = [], ordered = false, para = [];
   const flushList = () => {
     if(!list.length) return;
+    const items = list.map(x => {
+      const m = x.match(TASK_ITEM);
+      if(!m) return "<li>" + inline(x) + "</li>";
+      const done = m[1] !== " ";
+      return '<li class="md-task"><span class="md-box' + (done ? " on" : "") + '" aria-hidden="true">'
+        + (done ? "✓" : "") + "</span><span>" + inline(m[2]) + "</span></li>";
+    });
     const tag = ordered ? "ol" : "ul";
-    out.push("<" + tag + ">" + list.map(x => "<li>" + inline(x) + "</li>").join("") + "</" + tag + ">");
+    const cls = list.some(x => TASK_ITEM.test(x)) ? ' class="md-tasks"' : "";
+    out.push("<" + tag + cls + ">" + items.join("") + "</" + tag + ">");
     list = [];
   };
   const flushPara = () => { if(para.length){ out.push("<p>" + inline(para.join(" ")) + "</p>"); para = []; } };
@@ -276,12 +291,75 @@ document.addEventListener("alpine:init", () => {
     },
 
     /* --------------------------------------------------------- routing -- */
-    /** Form pages have real URLs; board views do not, so they always land back on "/". */
+    /**
+     * The URL for whatever is on screen — and it is exactly the breadcrumb:
+     *   Overview › Core Application › Checkout and Payment
+     *   /          core-application / checkout-and-payment
+     * The slugs come from the board JSON. They are generated in C# (Slugs.cs) and never recomputed
+     * here, so a link the browser builds and a URL the server resolves cannot drift apart.
+     */
+    routePath(){
+      if(this.page) return PATH_FOR[this.page];
+      if(this.view === "releases") return "/releases";
+      if(this.view === "release")  return "/releases/" + encodeURIComponent(this.releaseTag);
+      if(this.view === "epic"){
+        const e = this.epic;
+        return e ? "/" + e.slug : "/";
+      }
+      if(this.view === "story"){
+        const e = this.storyEpic, s = this.story;
+        return e && s ? "/" + e.slug + "/" + s.slug : "/";
+      }
+      return "/";
+    },
+
+    /** Reads the address bar into state. Runs on first load and on every back/forward, so it never
+     *  pushes history of its own. A URL naming something that no longer exists falls back to the
+     *  board and rewrites itself, so back doesn't bounce off a dead entry. */
     readUrl(){
-      const page = PAGES[location.pathname];
-      if(page === "edit-epic" && this.editingEpic === null) return this.goBoard();
-      if(page) this.openPage(page, false);
-      else { this.page = ""; }
+      const path = location.pathname;
+
+      const page = PAGES[path];
+      if(page){
+        if(page === "edit-epic" && this.editingEpic === null) return this.resetToBoard();
+        return this.openPage(page, false);
+      }
+      this.page = "";
+
+      if(path === "/" || path === "") return this.show("board", false);
+      if(path === "/releases") return this.show("releases", false);
+
+      const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
+
+      if(parts[0] === "releases" && parts.length === 2){
+        if(!this.releaseGroups().some(g => g.title === parts[1])) return this.resetToBoard();
+        this.releaseTag = parts[1];
+        return this.show("release", false);
+      }
+
+      // /{epic-slug} and /{epic-slug}/{story-slug} — the breadcrumb, read back.
+      if(parts.length === 1 || parts.length === 2){
+        const epic = this.epics.find(e => e.slug === parts[0]);
+        if(!epic) return this.resetToBoard();
+
+        if(parts.length === 1){
+          this.epicNumber = epic.number;
+          return this.show("epic", false);
+        }
+
+        const story = epic.stories.find(s => s.slug === parts[1]);
+        if(!story) return this.resetToBoard();
+        this.storyCode = story.code;
+        this.show("story", false);
+        return this.loadSkill();
+      }
+
+      return this.resetToBoard();
+    },
+
+    resetToBoard(){
+      history.replaceState({}, "", "/");
+      this.show("board", false);
     },
 
     openPage(page, push){
@@ -293,28 +371,33 @@ document.addEventListener("alpine:init", () => {
       if(page === "add-epic")  this.form = { title:"" };
       if(page === "add-story") this.form = { epicNumber: String(this.board.epics.length ? this.board.epics[0].number : 0), title:"", release:"", skillPath:"" };
       if(page === "edit-epic") this.form = { title: this.epicOf(this.editingEpic) ? this.epicOf(this.editingEpic).title : "" };
-      if(push !== false && location.pathname !== PATH_FOR[page]) history.pushState({}, "", PATH_FOR[page]);
+      if(push !== false) this.navigate();
     },
 
     /** Leaves any form page and shows a board view. */
-    show(view){
+    show(view, push){
       this.view = view;
       this.page = "";
       this.addOpen = false;
       this.drawerOpen = false;
       this.picker.open = false;
-      if(location.pathname !== "/") history.pushState({}, "", "/");
+      if(push !== false) this.navigate();
     },
 
-    goBoard(){ this.show("board"); },
-    goReleases(){ this.show("releases"); },
+    navigate(){
+      const path = this.routePath();
+      if(location.pathname !== path) history.pushState({}, "", path);
+    },
+
+    goBoard(push){ this.show("board", push); },
+    goReleases(push){ this.show("releases", push); },
     goConfigure(){ this.openPage("configure"); },
     goAddEpic(){ this.openPage("add-epic"); },
     goAddStory(){ this.openPage("add-story"); },
     goRenameEpic(){ this.editingEpic = this.epicNumber; this.openPage("edit-epic"); },
 
     openEpic(epic){ this.openEpicByNumber(epic.number); },
-    openEpicByNumber(number){ this.epicNumber = number; this.show("epic"); },
+    openEpicByNumber(number, push){ this.epicNumber = number; this.show("epic", push); },
     openRelease(section){ this.releaseTag = section.title; this.show("release"); },
 
     openStory(story){
@@ -461,15 +544,16 @@ document.addEventListener("alpine:init", () => {
     get editingEpicLabel(){ return "Epic " + this.editingEpic; },
 
     /* ------------------------------------------------------ story view -- */
-    get story(){
+    storyByCode(code){
       // Every field on the detail page reads through this, so it stops at the first match rather
       // than walking the whole board each time.
       for(const e of this.epics){
-        const s = e.stories.find(x => x.code === this.storyCode);
+        const s = e.stories.find(x => x.code === code);
         if(s) return s;
       }
       return null;
     },
+    get story(){ return this.storyByCode(this.storyCode); },
     get storyEpic(){ return this.epics.find(e => e.stories.some(s => s.code === this.storyCode)) || null; },
     get storyTitle(){ return this.story ? this.story.title : ""; },
     get storyCodeLabel(){ return this.storyCode || ""; },

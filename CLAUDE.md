@@ -69,10 +69,21 @@ button, PowerShell, React/Node), it was very likely already considered and rejec
   "Configure" = set backlog path + skills folder path (creates the backlog file from the template if
   missing). "Sync" = reload-from-disk (not save — writes are already instant); "Stage" = optional
   `git add BACKLOG.md` only, **never** auto-commit.
-- **Add / Configure are real pages at real URLs** (`/add-epic`, `/add-story`, `/edit-epic`,
-  `/configure`) with real `<form>` markup in `index.html` — not markup assembled in JavaScript. The
+- **Every screen has a real URL, and C# owns the route table.** `/` → `/epic/{n}` → `/story/{code}`
+  mirrors Overview → Epic → User Story, plus `/releases`, `/release/{tag}` and the form pages
+  (`/add-epic`, `/add-story`, `/edit-epic`, `/configure`). `Program.cs` declares each route
+  explicitly and 404s anything else — including `/epic/999` and `/story/US-999`, which it checks
+  against the backlog. **No blanket `MapFallbackToFile`**: a catch-all answers 200 to every typo.
+  What the server does *not* do is render each view — the browser already holds the board and swaps
+  views with no request, which is what makes navigation instant. Server owns *which routes exist*;
+  the client owns *the transition*.
+- Because URLs are nested, **asset paths in `index.html` must be absolute** (`/app.js`, not
+  `app.js`) — a relative path under `/story/US-01` resolves to `/story/app.js`.
+- Form pages use real `<form>` markup in `index.html`, not markup assembled in JavaScript. The
   browser does constraint validation, and every endpoint validates again server-side: the JS check
   is only there to save a round trip.
+- **Bind an image's `src` behind `x-if`, never `x-show`.** A hidden `<img>` still fetches its src;
+  with no logo configured that was a live request for `/story/null`.
 - **One navigation per screen size.** Up to 900px the sidebar collapses to a rail; 769–900px it is a
   drawer behind the hamburger; at 768px and below the drawer and hamburger are gone entirely and a
   bottom bar carries the destinations with the add action raised in the centre. Designed to 320px.

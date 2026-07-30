@@ -124,7 +124,32 @@ public static partial class BacklogParser
         }
 
         FlushEpic();
-        return new Board(epics, roadmapVersions, Sha256(markdown));
+        return new Board(AssignSlugs(epics), roadmapVersions, Sha256(markdown));
+    }
+
+    /// <summary>
+    /// Gives every epic and story its URL segment. Epic slugs are unique across the board and avoid
+    /// the app's own paths; story slugs only need to be unique inside their epic, because the story
+    /// URL is always reached through it. Titles fall back to the epic number or story code when
+    /// they contain nothing sluggable.
+    /// </summary>
+    private static List<Epic> AssignSlugs(List<Epic> epics)
+    {
+        var epicSlugs = Slugs.Unique(
+            epics.Select(e => e.Title).ToList(),
+            epics.Select(e => $"epic-{e.Number}").ToList(),
+            topLevel: true);
+
+        return epics.Select((epic, i) =>
+        {
+            var storySlugs = Slugs.Unique(
+                epic.Stories.Select(s => s.Title).ToList(),
+                epic.Stories.Select(s => s.Code).ToList(),
+                topLevel: false);
+
+            var stories = epic.Stories.Select((s, j) => s with { Slug = storySlugs[j] }).ToList();
+            return epic with { Slug = epicSlugs[i], Stories = stories };
+        }).ToList();
     }
 
     /// <summary>Splits a markdown table row into trimmed cells, honoring escaped "\|" pipes.</summary>

@@ -69,6 +69,12 @@ app.UseStaticFiles(new StaticFileOptions
     OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = "no-cache"
 });
 
+// UseRouting is placed here on purpose, AFTER the static files. Left implicit it runs at the very
+// start of the pipeline, and the static-file middleware skips any request that has already matched
+// an endpoint — so once "/{epicSlug}" existed, /app.css matched it and was served as HTML.
+// Files first, then routes.
+app.UseRouting();
+
 app.MapGet("/api/board", (BacklogService svc) => Results.Json(svc.GetBoard()));
 
 app.MapPost("/api/story/{code}/status", (string code, StatusRequest r, BacklogService svc) =>
@@ -270,10 +276,53 @@ static string Slug(string code, string title)
     return sb.ToString().Trim('-') is { Length: > 0 } s ? s : "skill";
 }
 
-// Real page URLs (/add-epic, /add-story, /configure) are handled by the client router, so a
-// direct visit or a refresh has to return index.html rather than a 404. API routes are matched
-// first, so this never shadows them.
-app.MapFallbackToFile("index.html");
+// ---------------------------------------------------------------------------------------------
+// Page routes. The server owns the route table: which URLs exist, and whether the thing a URL
+// names actually exists. A blanket fallback would answer 200 to every typo, so a stale bookmark
+// or a mistyped path would look like a working page.
+//
+// What it deliberately does NOT do is render each view. The browser already holds the whole board
+// and swaps views without a request, which is what makes navigation instant; re-rendering server
+// side would trade that for a round trip per click. So each of these returns the same shell and
+// the client router picks the view — but only for routes declared here, and only when the epic,
+// story or release is real.
+// ---------------------------------------------------------------------------------------------
+var shellPath = Path.Combine(app.Environment.WebRootPath, "index.html");
+IResult Shell(int status = StatusCodes.Status200OK) =>
+    Results.Text(File.ReadAllText(shellPath), "text/html; charset=utf-8", statusCode: status);
+
+// A route that exists but names something gone — a bookmark to a deleted story — still returns the
+// app so you land somewhere useful, but says 404 rather than pretending it found it.
+IResult ShellOr404(bool exists) => Shell(exists ? StatusCodes.Status200OK : StatusCodes.Status404NotFound);
+
+app.MapGet("/", () => Shell());
+app.MapGet("/releases", () => Shell());
+app.MapGet("/configure", () => Shell());
+app.MapGet("/add-epic", () => Shell());
+app.MapGet("/add-story", () => Shell());
+app.MapGet("/edit-epic", () => Shell());
+
+app.MapGet("/releases/{tag}", (string tag, BacklogService svc) =>
+{
+    var board = svc.GetBoard();
+    var used = board.Epics.SelectMany(e => e.Stories)
+        .Select(s => string.IsNullOrWhiteSpace(s.Release) ? "Unscheduled" : s.Release);
+    return ShellOr404(used.Contains(tag) || board.RoadmapVersions.Contains(tag));
+});
+
+// The hierarchy itself is the path: /core-application, then /core-application/checkout-and-payment.
+// Nothing else appears in it — no "epic/" or "story/" filler — so the URL always reads back as the
+// breadcrumb. The literal routes above are more specific, so they are matched first.
+app.MapGet("/{epicSlug}", (string epicSlug, BacklogService svc) =>
+    ShellOr404(svc.GetBoard().Epics.Any(e => e.Slug == epicSlug)));
+
+app.MapGet("/{epicSlug}/{storySlug}", (string epicSlug, string storySlug, BacklogService svc) =>
+{
+    var epic = svc.GetBoard().Epics.FirstOrDefault(e => e.Slug == epicSlug);
+    return ShellOr404(epic is not null && epic.Stories.Any(s => s.Slug == storySlug));
+});
+
+// Anything not declared above is a 404, as it would be for any other web server.
 
 app.Run();
 

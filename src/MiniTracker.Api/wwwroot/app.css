@@ -445,6 +445,14 @@ dialog .err{margin:0 0 12px;font-size:13px;font-weight:600;color:var(--err);
 .md ul,.md ol{margin:0 0 12px;padding-left:22px}
 .md li{margin:4px 0}
 .md a{color:var(--brand);text-decoration:underline;text-underline-offset:2px}
+/* Checkboxes written in the description file. Read-only on purpose — the clickable ones are the
+   story's tasks from BACKLOG.md, and these belong to the spec. */
+.md ul.md-tasks{list-style:none;padding-left:2px}
+.md li.md-task{display:flex;align-items:flex-start;gap:9px;margin:6px 0}
+.md .md-box{width:16px;height:16px;flex:none;margin-top:2px;border-radius:4px;border:1.5px solid var(--border);
+  background:var(--surface);color:transparent;font-size:11px;font-weight:700;line-height:1;
+  display:flex;align-items:center;justify-content:center}
+.md .md-box.on{border-color:var(--st-done-fg);background:var(--st-done-bg);color:var(--st-done-fg)}
 .md code{font-family:'IBM Plex Mono',monospace;font-size:.88em;background:var(--surface2);
   border:1px solid var(--border);border-radius:5px;padding:1px 5px}
 .md pre{margin:0 0 14px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;

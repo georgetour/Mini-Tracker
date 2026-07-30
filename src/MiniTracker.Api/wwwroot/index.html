@@ -6,7 +6,9 @@
 <title>Mini Tracker</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="app.css">
+<!-- Absolute, not relative: these are served under nested routes such as /story/US-01, where a
+     relative "app.css" would resolve to /story/app.css and 404. -->
+<link rel="stylesheet" href="/app.css">
 <!--
   The whole UI is declared here as markup. Alpine fills it in from JSON: nothing in app.js builds
   HTML, so what you see in the elements panel is what is written in this file.
@@ -17,8 +19,8 @@
   functions, no inline assignment. That is the constraint that keeps logic in app.js where it can
   be read and tested, instead of accumulating in attributes.
 -->
-<script src="vendor/alpine-csp.min.js" defer></script>
-<script src="app.js"></script>
+<script src="/vendor/alpine-csp.min.js" defer></script>
+<script src="/app.js"></script>
 </head>
 
 <body>
@@ -33,7 +35,9 @@
 
       <button id="logoSlot" type="button" x-on:click="clickLogo"
               x-bind:class="logoClass" x-bind:aria-label="logoLabel" x-bind:title="logoLabel">
-        <img x-show="hasLogo" x-bind:src="logoSrc" alt="">
+        <!-- x-if, not x-show: a hidden <img> still fetches its src, and with no logo set that is a
+             request for "null" against whatever route you happen to be on. -->
+        <template x-if="hasLogo"><img x-bind:src="logoSrc" alt=""></template>
         <span x-show="!hasLogo">+</span>
       </button>
 
@@ -441,11 +445,13 @@
 
           <div class="field">
             <label for="cfgLogo">Logo <span class="opt">optional</span></label>
-            <div class="logo-current" x-show="hasLogo">
-              <img x-bind:src="logoSrc" alt="">
-              <span class="logo-current-txt">Current logo</span>
-              <button type="button" class="btn ghost sm" x-on:click="removeLogo">Remove</button>
-            </div>
+            <template x-if="hasLogo">
+              <div class="logo-current">
+                <img x-bind:src="logoSrc" alt="">
+                <span class="logo-current-txt">Current logo</span>
+                <button type="button" class="btn ghost sm" x-on:click="removeLogo">Remove</button>
+              </div>
+            </template>
             <input type="file" id="cfgLogo" name="logo" x-ref="logo"
                    accept="image/png,image/jpeg,image/svg+xml,image/webp">
             <p class="hint" x-text="logoHint"></p>
