@@ -28,10 +28,34 @@ builder.Services.AddSingleton(new BacklogService(ResolveBacklogPath));
 var app = builder.Build();
 // Dynamic data must never be cached: a stale board would show statuses that are no longer in the
 // file. Without an explicit header a browser may heuristically cache a GET, so we say it outright.
+// A Content-Security-Policy with no 'unsafe-eval' and no 'unsafe-inline' for scripts. This is why
+// the front end uses Alpine's CSP build: it evaluates its bindings without new Function(), so an
+// injected string can never become executable code — the browser refuses to run it, rather than us
+// relying on having escaped every value correctly.
+// 'unsafe-inline' remains for styles only: x-show and x-bind:style write the style attribute, and
+// there is no script-execution risk in a style. Fonts come from Google, so those two hosts are
+// named explicitly rather than opening style-src and font-src to everything.
+const string ContentSecurityPolicy =
+    "default-src 'self'; " +
+    "script-src 'self'; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src https://fonts.gstatic.com; " +
+    "img-src 'self' data:; " +
+    "connect-src 'self'; " +
+    "form-action 'self'; " +
+    "base-uri 'none'; " +
+    "object-src 'none'; " +
+    "frame-ancestors 'none'";
+
 app.Use(async (ctx, next) =>
 {
+    var headers = ctx.Response.Headers;
+    headers["Content-Security-Policy"] = ContentSecurityPolicy;
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["Referrer-Policy"] = "no-referrer";
+
     if (ctx.Request.Path.StartsWithSegments("/api"))
-        ctx.Response.Headers.CacheControl = "no-store";
+        headers.CacheControl = "no-store";
     await next();
 });
 

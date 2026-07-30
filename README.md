@@ -168,13 +168,19 @@ index.html, app.css, app.js  ◄── served as static files
 ```
 
 C# handles the file: reading it, changing one value at a time, and updating the summary counts.
-The browser handles the screen — plain HTML, CSS and JavaScript, no framework, no build step.
+The browser handles the screen, using [Alpine.js](https://alpinejs.dev) — 60 KB, shipped with the
+app, no CDN, no npm, no build step. Every screen is written as ordinary HTML in `index.html`;
+Alpine fills it in from the JSON the API returns.
+
+It uses Alpine's CSP build, so the app can send a strict `Content-Security-Policy`: no inline
+scripts, no `eval`, nothing loaded from another site. Text from your files is written to the page as
+text, never as markup, so a backlog can't inject anything into the page.
 
 ```
 src/MiniTracker.Api/
 ├── Backlog/    read, write and summarise BACKLOG.md
 ├── Services/   settings and file lookup
-└── wwwroot/    the screen — index.html, app.css, app.js
+└── wwwroot/    the screen — index.html, app.css, app.js, vendor/alpine-csp.min.js
 templates/      starter BACKLOG.md and SKILL.md files
 tests/          test suite
 ```

@@ -17,6 +17,9 @@ src/MiniTracker.Api/wwwroot/uploads/
 # Local-only design reference material (copied from the private source repo) — never tracked
 reference/
 
+# Browser-automation scratch output
+.playwright-mcp/
+
 # Local-only development process records (specs, plans, working notes) — never tracked
 docs/superpowers/
 .superpowers/

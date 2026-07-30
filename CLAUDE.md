@@ -35,7 +35,21 @@ button, PowerShell, React/Node), it was very likely already considered and rejec
 - **Surgical writes only.** A status change swaps exactly one status token on exactly one line — never
   re-render the whole file (would reflow tables, disturb the `<!-- STATUS-SUMMARY -->` markers, and
   turn every git diff to noise).
-- **Plain HTML/CSS/JS frontend**, no React/Node — one self-contained .NET project stays tiny.
+- **Plain HTML/CSS/JS frontend with Alpine.js, no build step** — no React, no Node, no bundler. One
+  self-contained .NET project stays tiny. Alpine is **vendored** at
+  `wwwroot/vendor/alpine-csp.min.js` (60 KB), not loaded from a CDN: the app must work offline and
+  under a CSP that names no external script host.
+- **Alpine's CSP build specifically**, paired with a real `Content-Security-Policy` header from
+  `Program.cs` (no `unsafe-eval`, no `unsafe-inline` for scripts). It evaluates bindings without
+  `new Function()`, so injected text can never become code. The trade is that markup expressions are
+  property reads and method calls only — no template literals, arrow functions or inline assignment.
+  Anything needing computation is precomputed in `decorate()`. Don't "simplify" by swapping in the
+  standard Alpine build; that silently removes the guarantee the header is asserting.
+- **Markup lives in `index.html`, never in JavaScript.** `app.js` holds state and logic and returns
+  values; it does not assemble HTML. The single exception is `renderMarkdown()`, which escapes its
+  input before any transform runs and rejects link schemes other than http/https/mailto/anchor.
+- **Status colours are CSS classes (`.st-done`), never bound inline styles.** An inline style beats
+  every class rule, which is exactly how hover states here broke twice.
 - **`SKILL.md` is read-only reference**, linked from the story-detail page — this tool never parses or
   writes it, only `BACKLOG.md`.
 - **Dynamic local config, not a hardcoded default path.** `tracker.config.json` (gitignored, lives
@@ -99,15 +113,21 @@ button, PowerShell, React/Node), it was very likely already considered and rejec
   plus recording a skill path on a story that had none. Insertions are append-only at the insertion
   point so a diff shows purely added lines; deletions take their surrounding blank lines with them
   so repeated edits never grow a gap
-- `wwwroot/` — split into `index.html` (all markup, including the form pages and the delete
-  confirmation `<dialog>`), `app.css` and `app.js`. Identifiers are assigned by the app, never
-  typed. A story with no description gets its markdown file created from the template on demand,
-  in whichever skills folder the backlog's other stories already use
+- `wwwroot/index.html` — every view as declarative markup: board, epic, story detail, releases, the
+  four form pages, the status picker and the delete `<dialog>`. Board and release views share one
+  template because they are the same shape (a header plus story rows), fed by different data
+- `wwwroot/app.js` — one `Alpine.data('tracker')` component: state, routing, API calls, and
+  `decorate()`, which turns the server's board into the exact labels, class names and bar widths the
+  markup binds to. Identifiers are assigned by the app, never typed. A story with no description
+  gets its markdown file created from the template on demand, in whichever skills folder the
+  backlog's other stories already use
+- Verified in a real browser: all five views, both pickers, task toggles, all four forms, the
+  description round-trip, both deletes, and 320 / 860 / 1280px layouts — with zero CSP violations
 
 **Not yet built** — pick up here:
-1. **Alpine.js rebuild of the view layer** — `app.js` renders by building HTML strings, which is the
-   thing to replace: markup belongs in `index.html` with `x-` bindings, and `x-text` sets
-   `textContent`, so escaping stops being something we hand-roll. The C# side does not change.
+1. **Pagination** — measured at 1000 stories across 100 epics the board renders in roughly 400 ms,
+   which is fine but is the ceiling. An epic holding more than ~20–30 stories is a modelling smell
+   rather than a scale problem, so page the board, not the epic.
 2. **Dockerfile** — for eventual container deployment (Linux). Nothing built yet. Note: `templates/`
    is currently found by walking up from the working directory (same mechanism as `BacklogLocator`) —
    a container/publish build must ensure `templates/` ships alongside the app, or this needs revisiting.
