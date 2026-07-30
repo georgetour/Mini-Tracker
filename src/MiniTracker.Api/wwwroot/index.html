@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="root" style="min-height:100vh;background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:14px;display:flex;flex-direction:column">
+  <header style="background:var(--header);border-bottom:3px solid var(--strip);flex:none;position:sticky;top:0;z-index:70">
+    <div class="hwrap">
+      <button id="hamburger" class="hbtn icon-only" aria-label="Show navigation" aria-expanded="false" title="Show navigation"><span class="ic">☰</span></button>
+      <button id="logoSlot" type="button" aria-label="Set a logo" title="Set a logo"><span id="logoInner">+</span></button>
+      <span class="app-name">Mini Tracker</span>
+      <div class="hspacer"></div>
+      <!-- One global "+ Add" menu, per the design system's action-placement rule: the top bar
+           carries a single add menu, never one button per thing you can create. -->
+      <div class="addwrap">
+        <button id="btnAdd" class="addpill" aria-haspopup="menu" aria-expanded="false" aria-controls="addMenu"
+                title="Add an epic or a user story"><span class="ic">＋</span><span class="lbl">Add</span><span class="caret">▾</span></button>
+        <div id="addMenu" class="addmenu" role="menu" aria-labelledby="btnAdd" hidden>
+          <button role="menuitem" id="btnAddEpic">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+            <span>New epic</span>
+          </button>
+          <button role="menuitem" id="btnAddStory">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+            <span>New user story</span>
+          </button>
+        </div>
+      </div>
+      <button id="btnConfigure" class="hbtn h-stage icon-only" aria-label="Configure" title="Configure — choose which BACKLOG.md and skills folder to use"><span class="ic">⚙</span></button>
+      <button id="btnSync" class="hbtn h-sync" title="Reload BACKLOG.md from disk and refresh the roll-up summary"></button>
+      <button id="btnStage" class="hbtn h-stage" title="Run git add on BACKLOG.md so your changes are staged — never commits"></button>
+      <button id="btnTheme" class="hbtn h-stage icon-only" title="Switch between light and dark"><span class="ic">◐</span></button>
+    </div>
+  </header>
+  <div style="flex:1;max-width:1440px;width:100%;margin:0 auto;display:flex;align-items:flex-start;position:relative">
+    <div id="scrim" style="display:none"></div>
+    <aside id="sidebar" class="mt-noscroll"></aside>
+    <main id="main"><p style="color:var(--muted);padding:22px">Loading board…</p></main>
+
+    <!-- Form pages. Real <form> markup lives here, not in JavaScript strings, so the browser
+         does constraint validation for us and the fields are inspectable and testable. -->
+    <main id="pages" hidden>
+
+      <section id="page-configure" class="page" hidden>
+        <nav class="crumb"><button class="mt-crumb crumb-link" data-nav="board">Overview</button>
+          <span class="crumb-sep">›</span><span class="crumb-cur">Configure</span></nav>
+        <h1 class="page-title">Configure</h1>
+        <p class="page-sub">Choose which files Mini Tracker reads and writes.</p>
+
+        <form id="configForm" novalidate>
+          <div class="field">
+            <label for="cfgBacklog">Backlog file</label>
+            <input type="text" id="cfgBacklog" name="backlogPath" autocomplete="off"
+                   placeholder="C:/projects/my-app/BACKLOG.md">
+            <p class="hint">If the file doesn't exist yet, Mini Tracker creates it from the bundled template.</p>
+            <p class="field-err" data-err-for="cfgBacklog" hidden></p>
+          </div>
+
+          <div class="field">
+            <label for="cfgSkills">Skills folder <span class="opt">optional</span></label>
+            <input type="text" id="cfgSkills" name="skillsPath" autocomplete="off"
+                   placeholder="C:/projects/my-app">
+            <p class="hint">The folder your <span class="mono">skills/…</span> paths start from.</p>
+            <p class="field-err" data-err-for="cfgSkills" hidden></p>
+          </div>
+
+          <div class="field">
+            <label for="cfgLogo">Logo <span class="opt">optional</span></label>
+            <div id="logoCurrent" class="logo-current" hidden>
+              <img id="logoCurrentImg" alt="">
+              <span class="logo-current-txt">Current logo</span>
+              <button type="button" class="btn ghost sm" id="logoRemove">Remove</button>
+            </div>
+            <input type="file" id="cfgLogo" name="logo" accept="image/png,image/jpeg,image/svg+xml,image/webp">
+            <p class="hint" id="logoHint">PNG, JPG, SVG or WebP, up to 2&nbsp;MB. Shown in the top-left corner.</p>
+            <p class="field-err" data-err-for="cfgLogo" hidden></p>
+          </div>
+
+          <p class="form-err" id="configError" hidden></p>
+          <div class="actions">
+            <button type="button" class="btn ghost" data-nav="board">Cancel</button>
+            <button type="submit" class="btn primary">Save changes</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="page-add-epic" class="page" hidden>
+        <nav class="crumb"><button class="mt-crumb crumb-link" data-nav="board">Overview</button>
+          <span class="crumb-sep">›</span><span class="crumb-cur">Add epic</span></nav>
+        <h1 class="page-title">Add an epic</h1>
+        <p class="page-sub">Adds a new epic section to your <span class="mono">BACKLOG.md</span>.</p>
+
+        <form id="epicForm" novalidate>
+          <div class="field">
+            <label for="epicTitle">Title</label>
+            <input type="text" id="epicTitle" name="title" required maxlength="120" autocomplete="off"
+                   placeholder="Reporting">
+            <p class="field-err" data-err-for="epicTitle" hidden></p>
+          </div>
+
+          <p class="assigned">This will be <strong id="epicNumberPreview">Epic 5</strong>, the next free number.</p>
+
+          <p class="form-err" id="epicError" hidden></p>
+          <div class="actions">
+            <button type="button" class="btn ghost" data-nav="board">Cancel</button>
+            <button type="submit" class="btn primary">Add epic</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="page-edit-epic" class="page" hidden>
+        <nav class="crumb"><button class="mt-crumb crumb-link" data-nav="board">Overview</button>
+          <span class="crumb-sep">›</span><span class="crumb-cur">Rename epic</span></nav>
+        <h1 class="page-title">Rename epic</h1>
+        <p class="page-sub">Changes the epic's title in your <span class="mono">BACKLOG.md</span>. Its stories are untouched.</p>
+
+        <form id="editEpicForm" novalidate>
+          <div class="field">
+            <label for="editEpicTitle">Title</label>
+            <input type="text" id="editEpicTitle" name="title" required maxlength="120" autocomplete="off">
+            <p class="field-err" data-err-for="editEpicTitle" hidden></p>
+          </div>
+
+          <p class="assigned">Renaming <strong id="editEpicNumber">Epic 0</strong>. The number stays the same.</p>
+
+          <p class="form-err" id="editEpicError" hidden></p>
+          <div class="actions">
+            <button type="button" class="btn ghost" data-nav="board">Cancel</button>
+            <button type="submit" class="btn primary">Save title</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="page-add-story" class="page" hidden>
+        <nav class="crumb"><button class="mt-crumb crumb-link" data-nav="board">Overview</button>
+          <span class="crumb-sep">›</span><span class="crumb-cur">Add user story</span></nav>
+        <h1 class="page-title">Add a user story</h1>
+        <p class="page-sub">Adds a new story to an existing epic in your <span class="mono">BACKLOG.md</span>.</p>
+
+        <form id="storyForm" novalidate>
+          <div class="field">
+            <label for="storyEpic">Epic</label>
+            <select id="storyEpic" name="epicNumber" required></select>
+            <p class="field-err" data-err-for="storyEpic" hidden></p>
+          </div>
+
+          <div class="field">
+            <label for="storyTitle">Title</label>
+            <input type="text" id="storyTitle" name="title" required maxlength="120" autocomplete="off"
+                   placeholder="Export to CSV">
+            <p class="field-err" data-err-for="storyTitle" hidden></p>
+          </div>
+
+          <div class="field">
+            <label for="storyRelease">Release <span class="opt">optional</span></label>
+            <input type="text" id="storyRelease" name="release" maxlength="20" autocomplete="off" placeholder="V1">
+            <p class="field-err" data-err-for="storyRelease" hidden></p>
+          </div>
+
+          <div class="field">
+            <label for="storySkill">Skill file <span class="opt">optional</span></label>
+            <input type="text" id="storySkill" name="skillPath" maxlength="200" autocomplete="off"
+                   placeholder="skills/reporting/SKILL.md">
+            <p class="hint">Links this story to a written spec. Leave empty if it doesn't have one.</p>
+            <p class="field-err" data-err-for="storySkill" hidden></p>
+          </div>
+
+          <p class="assigned">This will be <strong id="storyCodePreview">US-25</strong>, the next free code.</p>
+
+          <p class="form-err" id="storyError" hidden></p>
+          <div class="actions">
+            <button type="button" class="btn ghost" data-nav="board">Cancel</button>
+            <button type="submit" class="btn primary">Add user story</button>
+          </div>
+        </form>
+      </section>
+
+    </main>
+  </div>
+</div>
+<!-- Mobile bottom navigation. Per the design system's mobile pattern: destinations as labelled
+     icons, with the primary create action elevated in the centre. Hidden on desktop, where the
+     sidebar and top bar do this job. -->
+<nav id="mobilenav" class="mobilenav" aria-label="Main">
+  <button class="mnav" data-mnav="board" aria-label="Overview">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>
+    <span>Overview</span>
+  </button>
+  <button class="mnav" data-mnav="releases" aria-label="By release">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+    <span>Releases</span>
+  </button>
+  <button class="mnav mnav-add" id="mnavAdd" aria-label="Add an epic or user story" aria-haspopup="menu" aria-expanded="false">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    <span class="sr-only">Add</span>
+  </button>
+  <button class="mnav" data-mnav="reload" aria-label="Reload from file">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+    <span>Reload</span>
+  </button>
+  <button class="mnav" data-mnav="configure" aria-label="Configure">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.35.46.6.84.68H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    <span>Configure</span>
+  </button>
+</nav>
+
+<!-- Deleting is the one action here that cannot be undone from the UI, so it asks first. Native
+     <dialog> gives the focus trap, Escape and backdrop for free; only the wording is filled in. -->
+<dialog id="confirmDialog" aria-labelledby="confirmTitle">
+  <form method="dialog">
+    <h2 id="confirmTitle">Delete this?</h2>
+    <p class="sub" id="confirmBody"></p>
+    <p class="err" id="confirmError" hidden></p>
+    <div class="actions">
+      <button type="submit" value="cancel" class="btn ghost">Cancel</button>
+      <button type="submit" value="delete" class="btn danger" id="confirmOk">Delete</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="overlay"></div>
+<div class="toast" id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

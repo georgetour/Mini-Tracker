@@ -1,0 +1,23 @@
+# .NET build output
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+
+# Rider / VS
+.idea/
+.vs/
+*.user
+
+# Local per-install config and generated content — never shipped/tracked
+tracker.config.json
+src/MiniTracker.Api/data/
+src/MiniTracker.Api/wwwroot/uploads/
+
+# Local-only design reference material (copied from the private source repo) — never tracked
+reference/
+
+# Local-only development process records (specs, plans, working notes) — never tracked
+docs/superpowers/
+.superpowers/
+.claude/

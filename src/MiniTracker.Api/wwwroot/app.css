@@ -1,0 +1,371 @@
+body{margin:0;background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:14px;
+  --bg:#F3F5F9;--surface:#FFFFFF;--surface2:#F6F8FC;--border:#DEE5F0;--text:#1B2A41;--muted:#556077;--faint:#64718A;
+  --brand:#1D5FC2;--brand-ink:#164A99;--header:#164A99;--strip:#0AA6B8;
+  --shadow:0 1px 2px rgba(27,42,65,.05),0 4px 16px rgba(27,42,65,.06);
+  --st-nys-bg:#E4E7ED;--st-nys-fg:#3E4A5E;
+  --st-rev-bg:#FCEACA;--st-rev-fg:#7A4A00;
+  --st-ref-bg:#D3F0EA;--st-ref-fg:#0B6B5E;
+  --st-prog-bg:#DCE7FB;--st-prog-fg:#15468F;
+  --st-test-bg:#EBE0FB;--st-test-fg:#5B21A6;
+  --st-done-bg:#DBF0DE;--st-done-fg:#186B37;
+  --st-hold-bg:#FBDCDC;--st-hold-fg:#9A241D;
+  --fail-bg:#FBDCDC;--fail-fg:#B3261E;
+  --ok:#186B37;--err:#B3261E;}
+body[data-theme="dark"]{
+  --bg:#0E1422;--surface:#161E30;--surface2:#1B2439;--border:#2B3853;--text:#E7EDF8;--muted:#A7B4CC;--faint:#7E8DA8;
+  --brand:#7CACF4;--brand-ink:#A9C8F8;--header:#12203A;--strip:#0FB4C6;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);
+  --st-nys-bg:#2A3346;--st-nys-fg:#C7D0E2;
+  --st-rev-bg:#3D2C0E;--st-rev-fg:#F0C36B;
+  --st-ref-bg:#0F3A34;--st-ref-fg:#6FE0CE;
+  --st-prog-bg:#16304F;--st-prog-fg:#9CC4FA;
+  --st-test-bg:#2E1F49;--st-test-fg:#CBA8F5;
+  --st-done-bg:#153A22;--st-done-fg:#7FDB9B;
+  --st-hold-bg:#3D1917;--st-hold-fg:#F5A39C;
+  --fail-bg:#44211F;--fail-fg:#F0938B;
+  --ok:#7FDB9B;--err:#F0938B;}
+@media (prefers-color-scheme:dark){body:not([data-theme]){
+  --bg:#0E1422;--surface:#161E30;--surface2:#1B2439;--border:#2B3853;--text:#E7EDF8;--muted:#A7B4CC;--faint:#7E8DA8;
+  --brand:#7CACF4;--brand-ink:#A9C8F8;--header:#12203A;--strip:#0FB4C6;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);
+  --st-nys-bg:#2A3346;--st-nys-fg:#C7D0E2;
+  --st-rev-bg:#3D2C0E;--st-rev-fg:#F0C36B;
+  --st-ref-bg:#0F3A34;--st-ref-fg:#6FE0CE;
+  --st-prog-bg:#16304F;--st-prog-fg:#9CC4FA;
+  --st-test-bg:#2E1F49;--st-test-fg:#CBA8F5;
+  --st-done-bg:#153A22;--st-done-fg:#7FDB9B;
+  --st-hold-bg:#3D1917;--st-hold-fg:#F5A39C;
+  --fail-bg:#44211F;--fail-fg:#F0938B;
+  --ok:#7FDB9B;--err:#F0938B;}}
+a{color:var(--brand)}a:hover{color:var(--brand-ink)}
+input[type="checkbox"]{accent-color:var(--brand)}
+@keyframes mt-spin{to{transform:rotate(360deg)}}
+@keyframes mt-slidein{from{transform:translate3d(-100%,0,0);opacity:.6}to{transform:translate3d(0,0,0);opacity:1}}
+@keyframes mt-fade{from{opacity:0}to{opacity:1}}
+.mt-noscroll{scrollbar-width:none;-ms-overflow-style:none}
+.mt-noscroll::-webkit-scrollbar{width:0;height:0;display:none}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}}
+.h-sync:hover{background:rgba(255,255,255,.16)}
+.h-stage:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.55)}
+
+*{box-sizing:border-box}
+/* Long titles and file paths wrap at word boundaries; only a single over-long token is ever
+   broken, and never mid-word for ordinary text. The page itself never scrolls sideways —
+   anything genuinely too wide (a table, a code block) scrolls inside its own box instead. */
+html,body{max-width:100%;overflow-x:hidden}
+body{overflow-wrap:break-word}
+#root,#main,#pages,.colwrap,.story-row,.epic-head{min-width:0}
+.mono{font-family:'IBM Plex Mono',monospace}
+.logoimg{height:26px;display:block;flex:none;cursor:pointer;border-radius:5px}
+main{flex:1;min-width:0;padding:22px 24px 60px}
+
+/* Empty slot: a dashed placeholder inviting an upload. */
+#logoSlot{height:26px;min-width:26px;flex:none;display:flex;align-items:center;justify-content:center;
+  border:1px dashed rgba(255,255,255,.5);border-radius:6px;background:transparent;color:#fff;
+  font-size:14px;cursor:pointer;opacity:.75;padding:0 5px;font-family:inherit}
+#logoSlot:hover{opacity:1;background:rgba(255,255,255,.14);border-style:solid}
+/* With a logo set, every placeholder style is dropped — no border, no dimming, no padding.
+   A logo is someone's brand; we show it as supplied. */
+#logoSlot.has-logo,#logoSlot.has-logo:hover{border:none;opacity:1;padding:0;background:transparent}
+#logoSlot.has-logo{height:auto;max-height:32px}
+#logoSlot.has-logo .logoimg{height:26px;width:auto;max-width:140px;object-fit:contain;display:block;border-radius:0}
+/* Keyboard focus still needs to be visible, but a mouse hover adds nothing to a logo. */
+#logoSlot.has-logo:focus-visible{outline:2px solid #fff;outline-offset:3px}
+
+/* Form pages (/configure, /add-epic, /add-story) */
+#pages{flex:1;min-width:0;padding:22px 24px 60px}
+.page{max-width:560px}
+/* Breadcrumbs match the board's: plain brand-coloured text, never a bordered button. */
+.page .crumb{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);
+  flex-wrap:wrap;margin-bottom:16px}
+.page .crumb-link{background:none;border:none;padding:0;color:var(--brand);font-family:inherit;
+  font-size:12.5px;font-weight:600;cursor:pointer}
+.page .crumb-link:hover{color:var(--brand-ink)}
+.page .crumb-sep{color:var(--faint)}
+.page .crumb-cur{font-weight:600;color:var(--text)}
+/* Current-logo preview on the Configure page. */
+.logo-current{display:flex;align-items:center;gap:12px;margin-bottom:10px;padding:10px 12px;
+  background:var(--surface2);border:1px solid var(--border);border-radius:8px}
+.logo-current img{height:26px;width:auto;max-width:160px;object-fit:contain;display:block}
+.logo-current-txt{flex:1;font-size:12.5px;color:var(--muted)}
+
+/* Read-only note showing the identifier the app will assign. */
+.assigned{margin:0 0 18px;font-size:13px;color:var(--muted);background:var(--surface2);
+  border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.assigned strong{font-family:'IBM Plex Mono',monospace;color:var(--text);font-weight:700}
+.page-title{margin:0 0 4px;font-size:26px;font-weight:700;line-height:1.2}
+.page-sub{margin:0 0 22px;color:var(--muted);font-size:13.5px}
+.page form{display:flex;flex-direction:column}
+.field{margin-bottom:18px;display:flex;flex-direction:column}
+.field label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:6px}
+.field label .opt{font-weight:500;letter-spacing:0;text-transform:none;opacity:.8}
+.field input,.field select{width:100%;font-family:inherit;font-size:14px;color:var(--text);
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.field input:focus-visible,.field select:focus-visible{outline:2px solid var(--brand);outline-offset:1px;
+  border-color:var(--brand)}
+.field input[type="file"]{padding:9px;cursor:pointer}
+.field input[aria-invalid="true"]{border-color:var(--err)}
+.hint{margin:6px 0 0;font-size:12px;color:var(--faint)}
+.field-err{margin:6px 0 0;font-size:12.5px;font-weight:600;color:var(--err)}
+.form-err{margin:0 0 16px;font-size:13px;font-weight:600;color:var(--err);
+  background:var(--fail-bg);border-radius:8px;padding:10px 12px}
+.actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px}
+.btn[disabled]{opacity:.6;cursor:progress}
+@media (max-width:640px){ .actions{flex-direction:column-reverse} .actions .btn{width:100%} }
+
+/* Native <dialog>: focus trap, Escape and backdrop come from the browser, not from us. */
+dialog{border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);
+  box-shadow:0 8px 28px rgba(10,20,40,.28);padding:0;width:min(520px,calc(100vw - 32px));
+  max-height:calc(100vh - 80px);overflow:auto}
+dialog::backdrop{background:rgba(10,16,30,.5)}
+dialog form{padding:22px 24px;margin:0;display:flex;flex-direction:column}
+dialog h2{margin:0 0 4px;font-size:18px}
+dialog p.sub{margin:0 0 16px;color:var(--muted);font-size:13px}
+dialog .field{margin-bottom:14px;display:flex;flex-direction:column}
+dialog .field label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:5px}
+dialog .field input{width:100%;font-family:inherit;font-size:14px;color:var(--text);background:var(--bg);
+  border:1px solid var(--border);border-radius:8px;padding:9px 11px}
+dialog .field input:focus-visible{outline:2px solid var(--brand);outline-offset:1px;border-color:var(--brand)}
+dialog .field input[type="file"]{padding:8px;cursor:pointer}
+dialog .hint{margin:6px 0 0;font-size:12px;color:var(--faint)}
+dialog .err{margin:0 0 12px;font-size:13px;font-weight:600;color:var(--err);
+  background:var(--fail-bg);border-radius:8px;padding:9px 11px}
+dialog .actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px}
+dialog .btn[disabled]{opacity:.6;cursor:progress}
+
+/* Header buttons. Labels drop away as the window narrows so nothing is ever pushed
+   off-screen — the icon and the tooltip still say what each button does. */
+.hbtn{display:flex;align-items:center;gap:7px;background:transparent;border:1px solid rgba(255,255,255,.35);
+  color:rgba(255,255,255,.92);border-radius:8px;padding:0 12px;height:34px;flex:none;box-sizing:border-box;
+  font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap}
+.hbtn.h-sync{background:rgba(255,255,255,.16);color:#fff;font-weight:600}
+.hbtn .ic{display:inline-flex;align-items:center;justify-content:center;flex:none}
+.hbtn.icon-only{padding:0;width:34px;justify-content:center}
+/* Between 900px and 768px the labels drop but the top bar still carries the actions. */
+@media (max-width:900px){ .hbtn .lbl{display:none} .hbtn{padding:0;width:34px;justify-content:center} }
+
+/* Global "+ Add" menu — a white pill, per the design system's top-bar treatment. */
+.addwrap{position:relative;flex:none}
+.addpill{display:flex;align-items:center;gap:6px;background:#fff;color:var(--brand-ink);border:none;
+  border-radius:999px;padding:0 14px;height:34px;font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;
+  font-weight:600;cursor:pointer;white-space:nowrap}
+.addpill:hover{background:rgba(255,255,255,.9)}
+.addpill:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.addpill .caret{font-size:9px;opacity:.7}
+.addmenu{position:absolute;top:calc(100% + 8px);right:0;z-index:90;min-width:210px;background:var(--surface);
+  border:1px solid var(--border);border-radius:11px;box-shadow:0 8px 28px rgba(10,20,40,.22);padding:6px}
+.addmenu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;
+  border:none;border-radius:7px;padding:8px 10px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;
+  color:var(--text);cursor:pointer;white-space:nowrap}
+.addmenu button:hover{background:var(--surface2)}
+.addmenu button:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+.addmenu svg{color:var(--muted);flex:none}
+@media (max-width:768px){ .addpill{padding:0;width:34px;justify-content:center} .addpill .lbl,.addpill .caret{display:none} }
+
+/* The hamburger only exists on narrow screens, where the sidebar becomes a slide-in drawer. */
+#hamburger{display:none}
+@media (max-width:900px){
+  #hamburger{display:flex}
+  #scrim.show{display:block;position:fixed;inset:0;background:rgba(10,16,30,.45);z-index:60}
+  main,#pages{padding:16px 14px 48px}
+  .colwrap{max-width:100%}
+}
+/* ---------- Mobile (≤768px) ----------
+   The design system's mobile pattern: a compact top bar carrying only identity, and a bottom
+   navigation bar holding the destinations with the create action elevated in the centre.
+   Designed down to 320px. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.mobilenav{display:none}
+
+@media (max-width:768px){
+  /* The top bar is identity only: logo, name, theme. Every action moved to the bottom bar — and
+     the drawer goes with them, because the bottom bar already reaches both destinations and the
+     Overview lists the epics. Two ways to the same two places is one way too many. */
+  .addwrap,#btnConfigure,#btnSync,#btnStage,#hamburger{display:none}
+  #sidebar{display:none}
+  .hwrap{gap:10px;padding:0 12px}
+
+  /* Room for the bottom bar, including the home indicator on notched phones. */
+  main,#pages{padding:16px 14px calc(84px + env(safe-area-inset-bottom,0px))}
+  .colwrap{max-width:100%}
+
+  .mobilenav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:75;
+    background:var(--surface);border-top:1px solid var(--border);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));
+    box-shadow:0 -2px 12px rgba(10,20,40,.06)}
+  .mnav{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;
+    background:none;border:none;padding:6px 2px;cursor:pointer;color:var(--muted);
+    font-family:'IBM Plex Sans',sans-serif;font-size:10px;font-weight:600;line-height:1.2}
+  .mnav span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mnav:hover,.mnav:focus-visible{color:var(--brand)}
+  .mnav:focus-visible{outline:2px solid var(--brand);outline-offset:-2px;border-radius:8px}
+  .mnav.active{color:var(--brand)}
+  /* The primary action sits raised above the bar, as in the design system's mobile screen. */
+  .mnav-add{flex:0 0 auto;width:52px;height:52px;margin-top:-18px;border-radius:999px;
+    background:var(--brand);color:#fff;box-shadow:0 4px 14px rgba(29,95,194,.4);justify-content:center}
+  .mnav-add:hover,.mnav-add:focus-visible{background:var(--brand-ink);color:#fff}
+  /* Anchor the add menu above the bar rather than off the bottom of the screen. */
+  .addmenu.mobile{position:fixed;right:12px;left:12px;bottom:calc(78px + env(safe-area-inset-bottom,0px));top:auto;min-width:0}
+
+  .st-title{font-size:21px}
+  .twocol{grid-template-columns:1fr;gap:18px}
+  .prog{flex-direction:column;gap:14px}
+  .page{max-width:100%}
+  .page-title{font-size:22px}
+}
+
+/* Header bar. Laid out in CSS rather than inline so the narrow-screen rules can actually change
+   its padding and gap — an inline style would win over every one of them. */
+.hwrap{max-width:1440px;margin:0 auto;padding:0 20px;height:56px;display:flex;align-items:center;gap:14px}
+.hspacer{flex:1;min-width:0}
+/* The product name shrinks before it disappears — a top bar with a lone icon at each end and a
+   void between them reads as broken rather than minimal. */
+.app-name{color:#fff;font-size:16px;font-weight:600;letter-spacing:.01em;white-space:nowrap;
+  min-width:0;overflow:hidden;text-overflow:ellipsis}
+
+/* Small phones down to 320px: nothing may overflow horizontally. */
+@media (max-width:400px){
+  .hwrap{gap:8px;padding:0 10px}
+  .app-name{font-size:14.5px}
+  main,#pages{padding:14px 12px calc(84px + env(safe-area-inset-bottom,0px))}
+  .mnav{font-size:9px}
+  .mnav svg{width:18px;height:18px}
+  .mnav-add{width:48px;height:48px;margin-top:-16px}
+  .page-title,.st-title{font-size:20px}
+  .epic-name{font-size:14.5px}
+  .md{font-size:13.5px}
+}
+
+/* hover states — declarations copied from the mockup's style-hover attributes */
+.mt-hb:hover{border-color:var(--brand);color:var(--brand)}
+.mt-row:hover{background:var(--surface2)}
+.mt-chev:hover{color:var(--brand)}
+/* Epic header. Colours live here, never inline — an inline style beats a class rule, which is
+   exactly why the old hover never showed. */
+.epic-head{display:flex;align-items:center;gap:10px;border-left:3px solid var(--brand);
+  border-bottom:1px solid var(--border);padding-left:12px}
+.mt-epich{display:inline-flex;align-items:center;gap:10px;width:fit-content;background:none;
+  border:none;padding:6px 0;cursor:pointer;text-align:left;font-family:inherit;color:var(--text)}
+.mt-epich:hover .epic-name{color:var(--brand)}
+.mt-epich:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:4px}
+.epic-badge{display:inline-flex;align-items:center;gap:5px;background:var(--st-prog-bg);
+  color:var(--brand);border-radius:5px;padding:2px 7px;font-size:9.5px;font-weight:700;
+  letter-spacing:.07em;flex:none}
+.epic-num{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;color:var(--brand)}
+.epic-name{font-size:17px;font-weight:700;color:var(--text)}
+.epic-count{font-size:12.5px;color:var(--faint)}
+
+/* Below 768px a story row has no width to spare: the title wraps onto its own line and the
+   status chip sits under it, rather than the two fighting over one line. */
+@media (max-width:768px){
+  .epic-head{flex-wrap:wrap;gap:6px 8px;padding-left:10px}
+  .epic-name{font-size:15px}
+  /* Title takes the full width; the status chip drops below it, aligned under the text.
+     Trying to keep both on one line is what cut the chip off. */
+  .story-row{flex-wrap:wrap;gap:8px;padding:10px 2px 10px 10px}
+  .mt-open{flex:1 1 100%;align-items:flex-start}
+  .mt-open .row-name{white-space:normal}
+  .mt-open .row-code{padding-top:1px}
+  .row-sp{display:none}
+  .row-badge{margin-left:24px}
+  .row-ctx{flex-basis:100%;margin-left:24px;white-space:normal}
+}
+
+/* Story row. Classes, not inline styles, so the mobile rules below can actually reach it. */
+.story-row{display:flex;align-items:center;gap:10px;padding:7px 4px 7px 24px;
+  border-bottom:1px solid var(--border);min-width:0}
+.row-sp{flex:1;min-width:0}
+.row-ctx{font-size:12.5px;color:var(--faint);white-space:nowrap;flex:none}
+.row-badge{flex:none;padding:3px 11px;font-size:11.5px;border-radius:999px;
+  border:1px solid transparent;display:flex;align-items:center;gap:6px;cursor:pointer;
+  font-family:'IBM Plex Sans',sans-serif;font-weight:600;white-space:nowrap}
+.row-badge .caret{font-size:8.5px;opacity:.75}
+
+/* Story row link. Same reasoning: the base colour is a class so :hover can override it. */
+.mt-open{display:inline-flex;align-items:center;gap:10px;width:fit-content;background:none;
+  border:none;padding:0;cursor:pointer;text-align:left;font-family:inherit;color:var(--text)}
+.mt-open .row-mark{flex:none;color:var(--faint)}
+.mt-open .row-code{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;
+  opacity:.7;white-space:nowrap}
+.mt-open .row-name{font-size:14px;font-weight:500;text-wrap:pretty}
+.mt-open:hover{color:var(--brand)}
+.mt-open:hover .row-mark{color:var(--brand)}
+.mt-open:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:4px}
+.mt-badge:hover{border-color:currentColor}
+.mt-crumb:hover{color:var(--brand-ink)}
+/* Rendered SKILL.md. Prose, not a code dump — the mockup shows readable text here.
+   overflow-wrap (not word-break) so only an over-long word ever breaks, never normal words. */
+.md{font-size:14px;line-height:1.65;color:var(--text);overflow-wrap:break-word}
+.md > *:first-child{margin-top:0}
+.md > *:last-child{margin-bottom:0}
+.md h2{font-size:17px;font-weight:700;margin:20px 0 8px}
+.md h3{font-size:14.5px;font-weight:700;margin:18px 0 6px}
+.md h4,.md h5,.md h6{font-size:13.5px;font-weight:700;margin:16px 0 6px;color:var(--muted)}
+.md p{margin:0 0 12px}
+.md ul,.md ol{margin:0 0 12px;padding-left:22px}
+.md li{margin:4px 0}
+.md a{color:var(--brand);text-decoration:underline;text-underline-offset:2px}
+.md code{font-family:'IBM Plex Mono',monospace;font-size:.88em;background:var(--surface2);
+  border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+.md pre{margin:0 0 14px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;
+  padding:12px 14px;overflow-x:auto}
+.md pre code{background:none;border:none;padding:0;font-size:12.5px;line-height:1.55}
+.md blockquote{margin:0 0 12px;padding:2px 0 2px 14px;border-left:3px solid var(--border);color:var(--muted)}
+.md hr{border:none;border-top:1px solid var(--border);margin:18px 0}
+.md-meta{font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;color:var(--muted);
+  background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;
+  margin-bottom:16px;overflow-wrap:anywhere}
+/* Wide tables scroll inside their own box rather than stretching the page. */
+.md-tablewrap{overflow-x:auto;margin:0 0 14px}
+.md table{border-collapse:collapse;width:100%;font-size:13px}
+.md th,.md td{border:1px solid var(--border);padding:7px 10px;text-align:left;vertical-align:top}
+.md th{background:var(--surface2);font-weight:700}
+
+/* A task or test-case row. Centred while the text fits on one line; once it wraps, the control
+   moves to the top so it sits with the first line instead of floating beside the middle of a
+   paragraph — which is what made these rows read as oddly padded on a phone. */
+.lrow{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);min-width:0}
+.lrow > span{min-width:0}
+@media (max-width:768px){
+  .lrow{align-items:flex-start;gap:9px;padding:8px 0}
+  .lrow > button{margin-top:1px}
+}
+
+/* Row of edit / delete actions on a story or epic. Sits next to the title, not buried inside a
+   panel — these are the two things you reach for most after reading the page. */
+.rowacts{display:flex;align-items:center;gap:8px;flex:none}
+.actbtn{display:inline-flex;align-items:center;gap:6px;background:var(--surface);color:var(--muted);
+  border:1px solid var(--border);border-radius:8px;padding:0 11px;height:32px;flex:none;
+  font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap}
+.actbtn svg{flex:none}
+.actbtn:hover{border-color:var(--brand);color:var(--brand)}
+.actbtn:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+/* Destructive actions read red on hover only — resting state stays quiet so the page isn't alarming. */
+.actbtn.danger:hover{border-color:var(--err);color:var(--err);background:var(--fail-bg)}
+.btn.danger{background:var(--err);border:1px solid var(--err);color:#fff}
+.btn.danger:hover{filter:brightness(.92)}
+/* Below 560px the labels go and the icons speak for themselves; the title needs the width more. */
+@media (max-width:560px){ .actbtn{padding:0;width:32px;justify-content:center} .actbtn .lbl{display:none} }
+
+/* Description card: the empty state when a story has no spec written yet. */
+.md-empty{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:6px 0 2px}
+.md-empty p{margin:0;color:var(--faint);font-size:13.5px;max-width:52ch}
+
+/* Status picker — fully styled inline in openPicker(), copied from the mockup. */
+.btn{border-radius:8px;padding:8px 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--brand);border:1px solid var(--brand);color:#fff}.btn.primary:hover{background:var(--brand-ink)}
+.btn.ghost{background:none;border:1px solid var(--border);color:var(--muted)}.btn.ghost:hover{background:var(--surface2)}
+.btn.sm{padding:5px 12px;font-size:12.5px}
+.btn.ghost.sm{color:var(--brand)}.btn.ghost.sm:hover{border-color:var(--brand)}
+.note{background:var(--st-prog-bg);color:var(--st-prog-fg);border-radius:8px;padding:10px 12px;font-size:12.5px;margin-top:14px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);
+  padding:9px 16px;border-radius:999px;font-size:12.5px;font-weight:600;z-index:120;opacity:0;transition:opacity .2s}
+.toast.show{opacity:1}
+a.skill{color:var(--brand);font-size:12.5px;font-weight:600;text-decoration:none}
+.backlink{background:none;border:none;color:var(--brand);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:14px}
+.det-tasks li,.det-tests li{list-style:none;display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)}
+ul.det-tasks,ul.det-tests{margin:8px 0 0;padding:0}
+.det-tasks input{width:17px;height:17px;accent-color:var(--brand);cursor:pointer}
