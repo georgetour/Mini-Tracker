@@ -36,12 +36,6 @@ Owned by US-12 (Reporting).
   orders.
 - [ ] AC2: The report's data can be exported as a CSV file matching what's shown on screen.
 
-## Test Cases
-
-| Test Case | Traces to | Input | Expected Result |
-|---|---|---|---|
-| TC-12-01 | AC1 | Generate the report for a period with a known set of paid orders | The reported monthly revenue equals the sum of those paid orders |
-
 ## Technical Reference
 
 See `@detailed-designs/reporting.md` for which order statuses count toward revenue, how a month

@@ -37,11 +37,11 @@ public class TrackerConfigServiceTests : IDisposable
     [Fact]
     public void Load_accepts_a_hand_edited_camelCase_file()
     {
-        File.WriteAllText(ConfigPath, """{"backlogPath":"C:/proj/BACKLOG.md","skillsPath":null,"logoPath":null,"isDemo":false}""");
+        File.WriteAllText(ConfigPath, """{"backlogPath":"C:/proj/BACKLOG.yaml","skillsPath":null,"logoPath":null,"isDemo":false}""");
 
         var cfg = Svc().Load();
 
-        Assert.Equal("C:/proj/BACKLOG.md", cfg.BacklogPath);
+        Assert.Equal("C:/proj/BACKLOG.yaml", cfg.BacklogPath);
     }
 
     [Fact]
@@ -58,21 +58,24 @@ public class TrackerConfigServiceTests : IDisposable
     public void SetBacklogPath_to_a_missing_file_creates_it_from_the_template()
     {
         var svc = Svc();
-        var target = Path.Combine(_dir, "sub", "BACKLOG.md");
+        var target = Path.Combine(_dir, "sub", "BACKLOG.yaml");
 
         var result = svc.SetBacklogPath(target);
 
         Assert.True(File.Exists(target));
         Assert.Equal(Path.GetFullPath(target), result.BacklogPath);
         Assert.False(result.IsDemo);
-        Assert.Contains("# Epic 0", File.ReadAllText(target));
+
+        // It must be a usable backlog, not just a file that exists.
+        var board = MiniTracker.Api.Backlog.YamlIndex.Parse(File.ReadAllText(target));
+        Assert.NotEmpty(board.Epics);
     }
 
     [Fact]
     public void SetBacklogPath_to_an_existing_file_does_not_overwrite_it()
     {
         var svc = Svc();
-        var target = Path.Combine(_dir, "BACKLOG.md");
+        var target = Path.Combine(_dir, "BACKLOG.yaml");
         File.WriteAllText(target, "# Epic 0: Custom\n");
 
         svc.SetBacklogPath(target);
@@ -84,7 +87,7 @@ public class TrackerConfigServiceTests : IDisposable
     public void MaterializeDemo_creates_the_file_once_and_marks_IsDemo()
     {
         var svc = Svc();
-        var demoPath = Path.Combine(_dir, "data", "BACKLOG.demo.md");
+        var demoPath = Path.Combine(_dir, "data", "BACKLOG.demo.yaml");
 
         var result = svc.MaterializeDemo(demoPath);
 
@@ -97,14 +100,21 @@ public class TrackerConfigServiceTests : IDisposable
     public void MaterializeDemo_copies_the_skill_files_and_points_SkillsPath_at_them()
     {
         var svc = Svc();
-        var demoPath = Path.Combine(_dir, "data", "BACKLOG.demo.md");
+        var demoPath = Path.Combine(_dir, "data", "BACKLOG.demo.yaml");
 
         var result = svc.MaterializeDemo(demoPath);
 
         var demoDir = Path.GetDirectoryName(demoPath)!;
-        Assert.Equal(Path.GetFullPath(demoDir), result.SkillsPath);
-        Assert.True(File.Exists(Path.Combine(demoDir, "skills", "tracker-tooling", "SKILL.md")));
-        Assert.Equal(12, Directory.GetFiles(Path.Combine(demoDir, "skills"), "SKILL.md", SearchOption.AllDirectories).Length);
+        var skillsDir = Path.Combine(demoDir, "skills");
+
+        // A story's folder is a bare name now, so the skills directory itself is the root.
+        Assert.Equal(Path.GetFullPath(skillsDir), result.SkillsPath);
+        Assert.True(File.Exists(Path.Combine(skillsDir, "backlog-board", "SKILL.md")));
+        Assert.True(File.Exists(Path.Combine(skillsDir, "backlog-board", "tasks.yaml")));
+        Assert.True(File.Exists(Path.Combine(skillsDir, "backlog-board", "test-cases.yaml")));
+
+        // One folder per story, not per shared skill file.
+        Assert.Equal(24, Directory.GetFiles(skillsDir, "SKILL.md", SearchOption.AllDirectories).Length);
     }
 
     [Fact]
@@ -114,7 +124,7 @@ public class TrackerConfigServiceTests : IDisposable
         var realSkills = Path.Combine(_dir, "my-real-skills");
         Directory.CreateDirectory(realSkills);
         svc.SetSkillsPath(realSkills);
-        var demoPath = Path.Combine(_dir, "data", "BACKLOG.demo.md");
+        var demoPath = Path.Combine(_dir, "data", "BACKLOG.demo.yaml");
 
         // Simulate ResolveBacklogPath falling through to MaterializeDemo because the configured
         // backlog is temporarily missing (moved folder, unmounted drive) — SkillsPath must survive.
@@ -128,10 +138,10 @@ public class TrackerConfigServiceTests : IDisposable
     public void MaterializeDemo_does_not_overwrite_edited_demo_skills()
     {
         var svc = Svc();
-        var demoPath = Path.Combine(_dir, "data", "BACKLOG.demo.md");
+        var demoPath = Path.Combine(_dir, "data", "BACKLOG.demo.yaml");
         svc.MaterializeDemo(demoPath);
 
-        var skillFile = Path.Combine(Path.GetDirectoryName(demoPath)!, "skills", "tracker-tooling", "SKILL.md");
+        var skillFile = Path.Combine(Path.GetDirectoryName(demoPath)!, "skills", "backlog-board", "SKILL.md");
         File.WriteAllText(skillFile, "# Edited by the user\n");
 
         svc.MaterializeDemo(demoPath);
@@ -146,7 +156,7 @@ public class TrackerConfigServiceTests : IDisposable
         var overridePath = Path.Combine(_dir, "override.md");
         File.WriteAllText(overridePath, "# Epic 0: Override\n");
 
-        var resolved = svc.ResolveBacklogPath(overridePath, Path.Combine(_dir, "data", "BACKLOG.demo.md"));
+        var resolved = svc.ResolveBacklogPath(overridePath, Path.Combine(_dir, "data", "BACKLOG.demo.yaml"));
 
         Assert.Equal(overridePath, resolved);
         Assert.Null(svc.Load().BacklogPath);
@@ -156,7 +166,7 @@ public class TrackerConfigServiceTests : IDisposable
     public void ResolveBacklogPath_falls_back_to_a_materialized_demo()
     {
         var svc = Svc();
-        var demoPath = Path.Combine(_dir, "data", "BACKLOG.demo.md");
+        var demoPath = Path.Combine(_dir, "data", "BACKLOG.demo.yaml");
 
         var resolved = svc.ResolveBacklogPath(overridePath: null, demoPath);
 
@@ -168,10 +178,10 @@ public class TrackerConfigServiceTests : IDisposable
     public void ResolveBacklogPath_prefers_the_configured_path_once_set()
     {
         var svc = Svc();
-        var target = Path.Combine(_dir, "BACKLOG.md");
+        var target = Path.Combine(_dir, "BACKLOG.yaml");
         svc.SetBacklogPath(target);
 
-        var resolved = svc.ResolveBacklogPath(overridePath: null, Path.Combine(_dir, "data", "BACKLOG.demo.md"));
+        var resolved = svc.ResolveBacklogPath(overridePath: null, Path.Combine(_dir, "data", "BACKLOG.demo.yaml"));
 
         Assert.Equal(Path.GetFullPath(target), resolved);
     }

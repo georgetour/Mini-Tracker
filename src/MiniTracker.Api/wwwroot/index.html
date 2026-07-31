@@ -167,6 +167,23 @@
     <main id="main" x-show="!onFormPage">
       <p class="none" x-show="loadError" x-text="loadError"></p>
 
+      <!-- What Sync found. Splitting the backlog into an index plus story folders made it possible
+           for the two to disagree; this is where that is surfaced rather than mis-rendered. -->
+      <div class="report" x-show="report.show" x-bind:class="report.cls">
+        <div class="report-head">
+          <strong x-text="report.title"></strong>
+          <div class="spacer"></div>
+          <button class="rowdel" x-on:click="dismissReport" title="Dismiss" aria-label="Dismiss">✕</button>
+        </div>
+        <template x-for="issue in report.issues" :key="issue.message">
+          <div class="report-line">
+            <span class="report-sev" x-bind:class="issue.sevClass" x-text="issue.severity"></span>
+            <span x-text="issue.message"></span>
+            <span class="report-where" x-show="issue.where" x-text="issue.where"></span>
+          </div>
+        </template>
+      </div>
+
       <!-- Breadcrumb, shown on every view except the top-level board. -->
       <nav class="crumb" aria-label="Breadcrumb" x-show="crumbs.length" x-bind:class="crumbClass">
         <template x-for="c in crumbs" :key="c.label">
@@ -220,8 +237,8 @@
                 <span class="row-ctx" x-show="row.ctx" x-text="row.ctx"></span>
                 <span class="spacer"></span>
                 <button class="chip row-badge" x-bind:class="row.s.statusClass" x-on:click.stop="openStatusPicker(row.s, $el)">
-                  <span x-text="row.s.status.emoji"></span>
-                  <span x-text="row.s.status.label"></span>
+                  <span x-text="row.s.emoji"></span>
+                  <span x-text="row.s.status"></span>
                   <span class="caret">▾</span>
                 </button>
               </div>
@@ -254,65 +271,24 @@
           </div>
         </div>
 
-        <div class="cards" x-show="epicStories.length">
+        <!-- An epic lists its stories and nothing else. Tasks and test cases belong to the story,
+             and repeating them here would duplicate the story page — as well as forcing the board
+             to load detail it does not show. -->
+        <div class="group" x-show="epicStories.length">
           <template x-for="story in epicStories" :key="story.code">
-            <div class="card scard">
-              <div class="scard-top">
-                <div class="scard-hd">
-                  <span class="scode" x-text="story.code"></span>
-                  <div class="spacer"></div>
-                  <span class="vtag" x-show="story.release" x-text="story.release"></span>
-                </div>
-                <button class="scard-title" x-on:click="openStory(story)" title="Open story detail" x-text="story.title"></button>
-                <div>
-                  <button class="chip" x-bind:class="story.statusClass" x-on:click.stop="openStatusPicker(story, $el)">
-                    <span x-text="story.status.emoji"></span>
-                    <span x-text="story.status.label"></span>
-                    <span class="caret">▾</span>
-                  </button>
-                </div>
-                <div class="progs">
-                  <div class="prog">
-                    <div class="prog-top"><span>Tasks</span><span class="prog-n" x-text="story.taskLabel"></span></div>
-                    <div class="bar"><i class="b-task" x-bind:style="story.taskBar"></i></div>
-                  </div>
-                  <div class="prog">
-                    <div class="prog-top">
-                      <span>Test cases</span>
-                      <span class="prog-n"><span x-text="story.tcLabel"></span><span class="prog-fail" x-show="story.tcFail" x-text="story.tcFailLabel"></span></span>
-                    </div>
-                    <div class="bar"><i class="b-pass" x-bind:style="story.tcPassBar"></i><i class="b-fail" x-bind:style="story.tcFailBar"></i></div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="scard-body">
-                <div class="cols">
-                  <div>
-                    <div class="colhead" x-text="story.tasksHeading"></div>
-                    <template x-for="task in story.tasks" :key="task.id">
-                      <div class="lrow">
-                        <button class="box" x-bind:class="boxClass(task)" x-on:click="toggleTask(story, task)"
-                                title="Toggle done" x-text="task.mark"></button>
-                        <span class="txt" x-bind:class="task.textClass" x-text="task.text"></span>
-                      </div>
-                    </template>
-                    <div class="none" x-show="!story.tasks.length">No tasks yet.</div>
-                  </div>
-                  <div>
-                    <div class="colhead" x-text="story.tcHeading"></div>
-                    <template x-for="tc in story.testCases" :key="tc.id">
-                      <div class="lrow">
-                        <button class="chip sm" x-bind:class="tc.statusClass" x-on:click.stop="openTestPicker(story, tc, $el)">
-                          <span x-text="tc.status.label"></span><span class="caret">▾</span>
-                        </button>
-                        <span class="txt" x-text="tc.description"></span>
-                      </div>
-                    </template>
-                    <div class="none" x-show="!story.testCases.length">No test cases yet.</div>
-                  </div>
-                </div>
-              </div>
+            <div class="story-row">
+              <button class="mt-open" x-on:click="openStory(story)" title="Open story">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="row-mark"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                <span class="row-code" x-text="story.code"></span>
+                <span class="row-name" x-text="story.title"></span>
+              </button>
+              <span class="spacer"></span>
+              <span class="vtag" x-show="story.release" x-text="story.release"></span>
+              <button class="chip row-badge" x-bind:class="story.statusClass" x-on:click.stop="openStatusPicker(story, $el)">
+                <span x-text="story.emoji"></span>
+                <span x-text="story.status"></span>
+                <span class="caret">▾</span>
+              </button>
             </div>
           </template>
         </div>
@@ -381,37 +357,59 @@
             <p class="hint" x-show="skill.editing">Plain markdown. Saved to <span class="mono" x-text="skill.path"></span>.</p>
             <span class="none" x-show="skill.loading">Loading…</span>
             <span class="none" x-show="skill.error" x-text="skill.error"></span>
-            <div class="md-empty" x-show="skillMissing">
-              <p>This story has no description yet. Mini Tracker keeps each description in its own
-                 markdown file so it lives with your project, not in a database.</p>
-              <button class="btn primary sm" x-on:click="editDescription">Write a description</button>
-            </div>
           </div>
         </div>
 
         <div class="card pad cols wide">
           <div>
             <div class="colhead" x-text="detailTasksHeading"></div>
-            <template x-for="task in storyTasks" :key="task.id">
+            <span class="none" x-show="detail.loading">Loading…</span>
+            <span class="none" x-show="detail.error" x-text="detail.error"></span>
+
+            <template x-for="(task, i) in storyTasks" :key="i">
               <div class="lrow">
-                <button class="box" x-bind:class="boxClass(task)" x-on:click="toggleTask(story, task)"
-                        title="Toggle done" x-text="task.mark"></button>
-                <span class="txt" x-bind:class="task.textClass" x-text="task.text"></span>
+                <button class="box" x-bind:class="boxClass(task)" x-on:click="toggleTask(i)"
+                        title="Toggle done" x-text="taskMark(task)"></button>
+                <span class="txt" x-show="editingTask !== i" x-bind:class="taskTextClass(task)"
+                      x-text="task.text" x-on:click="startEditTask(i)" title="Click to edit"></span>
+                <input class="inline-input" x-show="editingTask === i" x-ref="editTask" x-model="draftText"
+                       aria-label="Task text"
+                       x-on:keydown.enter="commitEditTask" x-on:keydown.escape="cancelEdit"
+                       x-on:blur="commitEditTask">
+                <button class="rowdel" x-on:click="removeTask(i)" title="Delete task" aria-label="Delete task">✕</button>
               </div>
             </template>
-            <div class="none" x-show="!storyTasks.length">No tasks yet.</div>
+
+            <div class="lrow addrow">
+              <button class="addlink" x-show="!addingTask" x-on:click="startAddTask">＋ Add task</button>
+              <input class="inline-input" x-show="addingTask" x-ref="newTask" x-model="draftText"
+                     placeholder="What needs doing?" aria-label="New task"
+                     x-on:keydown.enter="commitAddTask" x-on:keydown.escape="cancelEdit"
+                     x-on:blur="cancelEdit">
+            </div>
           </div>
+
           <div>
             <div class="colhead" x-text="detailTcHeading"></div>
-            <template x-for="tc in storyTestCases" :key="tc.id">
+            <span class="none" x-show="detail.loading">Loading…</span>
+
+            <template x-for="(tc, i) in storyTestCases" :key="i">
               <div class="lrow">
-                <button class="chip sm" x-bind:class="tc.statusClass" x-on:click.stop="openTestPicker(story, tc, $el)">
-                  <span x-text="tc.status.label"></span><span class="caret">▾</span>
+                <button class="chip sm" x-bind:class="tc.statusClass" x-on:click.stop="openTestPicker(i, $el)">
+                  <span x-text="tc.status"></span><span class="caret">▾</span>
                 </button>
-                <span class="txt" x-text="tc.description"></span>
+                <span class="txt" x-text="tc.text"></span>
+                <button class="rowdel" x-on:click="removeTestCase(i)" title="Delete test case" aria-label="Delete test case">✕</button>
               </div>
             </template>
-            <div class="none" x-show="!storyTestCases.length">No test cases yet.</div>
+
+            <div class="lrow addrow">
+              <button class="addlink" x-show="!addingTest" x-on:click="startAddTest">＋ Add test case</button>
+              <input class="inline-input" x-show="addingTest" x-ref="newTest" x-model="draftText"
+                     placeholder="What must be verified?" aria-label="New test case"
+                     x-on:keydown.enter="commitAddTest" x-on:keydown.escape="cancelEdit"
+                     x-on:blur="cancelEdit">
+            </div>
           </div>
         </div>
       </section>

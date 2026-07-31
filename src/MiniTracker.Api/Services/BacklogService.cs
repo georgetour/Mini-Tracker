@@ -4,155 +4,243 @@ using MiniTracker.Api.Backlog;
 namespace MiniTracker.Api.Services;
 
 /// <summary>
-/// Read/write gateway over BACKLOG.md. Stateless w.r.t. board data — the file is re-read on each call
-/// so external edits (a CI push, a hand edit) are always reflected. The path itself is also resolved
-/// fresh on each call via <paramref name="resolvePath"/>, so pointing the tracker at a different file
-/// through Configure takes effect immediately, no restart. Writes are serialized and go through the
-/// surgical <see cref="BacklogWriter"/>; a story-status change also regenerates the STATUS-SUMMARY
-/// block (task/test-case changes don't affect the roll-up).
+/// Read/write gateway over the backlog. Both paths resolve fresh on every call, so pointing the
+/// tracker somewhere else through Configure takes effect with no restart. Writes are serialized
+/// behind a lock and are whole-file: deserialize, mutate, serialize. There is no surgical text
+/// editing because the app is the only writer.
+///
+/// A status write touches the index; a task write touches that story's tasks.yaml. Never both — so
+/// there is no cross-file transaction to get wrong. Deleting is the one exception, and it removes
+/// the index entry first: that is the source of truth, and a leftover folder is a warning Sync
+/// reports rather than a story pointing at nothing.
 /// </summary>
-public sealed class BacklogService(Func<string> resolvePath)
+public sealed class BacklogService(Func<string> resolveBacklog, Func<string> resolveSkills)
 {
     private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
     private readonly object _lock = new();
 
-    public string BacklogPath => resolvePath();
+    public string BacklogPath => resolveBacklog();
+    public string SkillsRoot => resolveSkills();
 
     public Board GetBoard()
     {
-        lock (_lock) return BacklogParser.Parse(Read(resolvePath()));
+        lock (_lock) return Read();
     }
 
-    public Board SetStoryStatus(string code, StatusToken status)
+    public StoryDetail GetStory(string code)
     {
         lock (_lock)
         {
-            var path = resolvePath();
-            var md = BacklogWriter.SetStoryStatus(Read(path), code, status);
-            md = RegenerateSummaryBlock(md);   // story status feeds the roll-up
-            Write(path, md);
-            return BacklogParser.Parse(md);
+            var (_, story) = Locate(Read(), code);
+            return StoryFolder.Read(resolveSkills(), story.Folder);
         }
     }
 
-    public Board SetTaskDone(string code, string taskId, bool done)
+    public ValidationReport Validate() => BacklogValidation.Check(resolveBacklog(), resolveSkills());
+
+    public Board SetStoryStatus(string code, string status)
     {
+        status = (status ?? "").Trim();
+        if (!BacklogValidation.Statuses.Contains(status))
+            throw new BacklogValidationException(
+                $"\"{status}\" is not a status. Use one of: {string.Join(", ", BacklogValidation.Statuses)}.");
+
         lock (_lock)
         {
-            var path = resolvePath();
-            var md = BacklogWriter.SetTaskDone(Read(path), code, taskId, done);
-            Write(path, md);
-            return BacklogParser.Parse(md);
+            var board = Read();
+            var (epic, story) = Locate(board, code);
+            return Save(Replace(board, epic, story with { Status = status }));
         }
     }
 
-    public Board SetTestCaseStatus(string code, string tcId, StatusToken status)
+    /// <summary>A story with hundreds of tasks is a story that should have been split. The cap is
+    /// far above anything the UI can produce, so hitting it means something is wrong rather than
+    /// someone being thorough — and it stops one request writing a megabyte of YAML.</summary>
+    private const int MaxItems = 200;
+
+    public void SetTasks(string code, IReadOnlyList<TaskItem> tasks)
     {
+        if (tasks.Count > MaxItems)
+            throw new BacklogValidationException(
+                $"A story can hold up to {MaxItems} tasks. Split it into more than one story.");
+
+        var clean = tasks.Select(t => new TaskItem(Require(t.Text, "A task needs some text.", 500), t.Done)).ToList();
+
         lock (_lock)
         {
-            var path = resolvePath();
-            var md = BacklogWriter.SetTestCaseStatus(Read(path), code, tcId, status);
-            Write(path, md);
-            return BacklogParser.Parse(md);
+            var (_, story) = Locate(Read(), code);
+            StoryFolder.WriteTasks(resolveSkills(), story.Folder, clean);
         }
     }
 
-    /// <summary>Adds an epic, then refreshes the roll-up now that there is a new epic to count.</summary>
+    public void SetTestCases(string code, IReadOnlyList<TestCase> cases)
+    {
+        if (cases.Count > MaxItems)
+            throw new BacklogValidationException(
+                $"A story can hold up to {MaxItems} test cases. Split it into more than one story.");
+
+        var clean = cases.Select(c =>
+        {
+            var status = (c.Status ?? "").Trim();
+            if (!BacklogValidation.TestStatuses.Contains(status))
+                throw new BacklogValidationException(
+                    $"\"{status}\" is not a test-case status. Use {string.Join(", ", BacklogValidation.TestStatuses)}.");
+            return new TestCase(Require(c.Text, "A test case needs some text.", 500), status);
+        }).ToList();
+
+        lock (_lock)
+        {
+            var (_, story) = Locate(Read(), code);
+            StoryFolder.WriteTestCases(resolveSkills(), story.Folder, clean);
+        }
+    }
+
     public Board AddEpic(int number, string title)
     {
+        if (number < 0 || number > 999)
+            throw new BacklogValidationException("Use an epic number between 0 and 999.");
+        title = Require(title, "Give the epic a title.", 120);
+
         lock (_lock)
         {
-            var path = resolvePath();
-            var md = RegenerateSummaryBlock(BacklogGenerator.AddEpic(Read(path), number, title));
-            Write(path, md);
-            return BacklogParser.Parse(md);
+            var board = Read();
+            if (board.Epics.Any(e => e.Number == number))
+                throw new BacklogValidationException($"Epic {number} already exists. Pick another number.");
+
+            var epics = board.Epics.Append(new Epic(number, title, new List<Story>())).ToList();
+            return Save(board with { Epics = epics });
         }
     }
 
-    /// <summary>Adds a story to an existing epic, then refreshes the roll-up.</summary>
-    public Board AddStory(int epicNumber, string code, string title, string? release, string? skillPath)
-    {
-        lock (_lock)
-        {
-            var path = resolvePath();
-            var md = RegenerateSummaryBlock(
-                BacklogGenerator.AddStory(Read(path), epicNumber, code, title, release, skillPath));
-            Write(path, md);
-            return BacklogParser.Parse(md);
-        }
-    }
-
-    /// <summary>Renames an epic. The roll-up carries the title, so it is refreshed too.</summary>
     public Board RenameEpic(int number, string title)
     {
+        title = Require(title, "Give the epic a title.", 120);
+
         lock (_lock)
         {
-            var path = resolvePath();
-            var md = RegenerateSummaryBlock(BacklogGenerator.RenameEpic(Read(path), number, title));
-            Write(path, md);
-            return BacklogParser.Parse(md);
+            var board = Read();
+            if (board.Epics.All(e => e.Number != number))
+                throw new BacklogValidationException($"There is no epic {number}.");
+
+            return Save(board with
+            {
+                Epics = board.Epics.Select(e => e.Number == number ? e with { Title = title } : e).ToList(),
+            });
         }
     }
 
-    /// <summary>Deletes an epic and every story in it.</summary>
     public Board DeleteEpic(int number)
     {
         lock (_lock)
         {
-            var path = resolvePath();
-            var md = RegenerateSummaryBlock(BacklogGenerator.RemoveEpic(Read(path), number));
-            Write(path, md);
-            return BacklogParser.Parse(md);
+            var board = Read();
+            var epic = board.Epics.FirstOrDefault(e => e.Number == number)
+                ?? throw new BacklogValidationException($"There is no epic {number}.");
+
+            var saved = Save(board with { Epics = board.Epics.Where(e => e.Number != number).ToList() });
+
+            foreach (var story in epic.Stories) TryDeleteFolder(story.Folder);
+            return saved;
         }
     }
 
-    /// <summary>Deletes a single story. Its SKILL.md is left on disk — deleting a backlog entry
-    /// should not silently destroy a spec someone wrote.</summary>
+    public Board AddStory(int epicNumber, string code, string title, string? release)
+    {
+        code = Require(code, "Give the story a code, for example US-25.", 20);
+        title = Require(title, "Give the story a title.", 120);
+        release = (release ?? "").Trim();
+
+        lock (_lock)
+        {
+            var board = Read();
+            var epic = board.Epics.FirstOrDefault(e => e.Number == epicNumber)
+                ?? throw new BacklogValidationException($"There is no epic {epicNumber} to add this story to.");
+
+            if (board.Epics.SelectMany(e => e.Stories).Any(s => s.Code == code))
+                throw new BacklogValidationException($"{code} is already used. Pick another code.");
+
+            var folder = FreeFolder(board, title, code);
+            StoryFolder.Create(resolveSkills(), folder, code, title);
+
+            var story = new Story(code, title, "Not Yet Started", release, folder);
+            return Save(Replace(board, epic with { Stories = epic.Stories.Append(story).ToList() }));
+        }
+    }
+
     public Board DeleteStory(string code)
     {
         lock (_lock)
         {
-            var path = resolvePath();
-            var md = RegenerateSummaryBlock(BacklogGenerator.RemoveStory(Read(path), code));
-            Write(path, md);
-            return BacklogParser.Parse(md);
+            var board = Read();
+            var (epic, story) = Locate(board, code);
+
+            var saved = Save(Replace(board,
+                epic with { Stories = epic.Stories.Where(s => s.Code != code).ToList() }));
+
+            TryDeleteFolder(story.Folder);
+            return saved;
         }
     }
 
-    /// <summary>Records a skill path against a story that had none.</summary>
-    public Board SetStorySkill(string code, string skillPath)
+    // ------------------------------------------------------------------ helpers --
+
+    private Board Read() => YamlIndex.Parse(File.ReadAllText(resolveBacklog()));
+
+    private Board Save(Board board)
     {
-        lock (_lock)
+        var yaml = YamlIndex.Write(board);
+        File.WriteAllText(resolveBacklog(), yaml, Utf8NoBom);
+        return YamlIndex.Parse(yaml);   // re-parse so slugs are assigned from the saved titles
+    }
+
+    /// <summary>A folder name nothing else is using. Derived from the title, so it reads like the
+    /// story, with a numeric suffix only when two stories would collide.</summary>
+    private static string FreeFolder(Board board, string title, string code)
+    {
+        var used = new HashSet<string>(
+            board.Epics.SelectMany(e => e.Stories).Select(s => s.Folder), StringComparer.OrdinalIgnoreCase);
+
+        var baseSlug = Slugs.Unique(new[] { title }, new[] { code }, topLevel: false)[0];
+        var candidate = baseSlug;
+        for (var n = 2; used.Contains(candidate); n++) candidate = $"{baseSlug}-{n}";
+        return candidate;
+    }
+
+    private static (Epic, Story) Locate(Board board, string code)
+    {
+        foreach (var epic in board.Epics)
         {
-            var path = resolvePath();
-            var md = BacklogGenerator.SetStorySkill(Read(path), code, skillPath);
-            Write(path, md);
-            return BacklogParser.Parse(md);
+            var story = epic.Stories.FirstOrDefault(s => s.Code == code);
+            if (story is not null) return (epic, story);
         }
+        throw new BacklogValidationException($"There is no story {code}.");
     }
 
-    /// <summary>Regenerates the summary in place and saves — the CLI 'sync-status' entry point.</summary>
-    public void SyncStatus()
+    private static Board Replace(Board board, Epic updated) => board with
     {
-        lock (_lock)
-        {
-            var path = resolvePath();
-            Write(path, RegenerateSummaryBlock(Read(path)));
-        }
-    }
+        Epics = board.Epics.Select(e => e.Number == updated.Number ? updated : e).ToList(),
+    };
 
-    private static string RegenerateSummaryBlock(string md)
+    private static Board Replace(Board board, Epic epic, Story updated) => Replace(board, epic with
     {
-        var start = md.IndexOf(SummaryWriter.StartMarker, StringComparison.Ordinal);
-        var end = md.IndexOf(SummaryWriter.EndMarker, StringComparison.Ordinal);
-        if (start < 0 || end < start) return md; // no markers — leave untouched
+        Stories = epic.Stories.Select(s => s.Code == updated.Code ? updated : s).ToList(),
+    });
 
-        var eol = md.Contains("\r\n") ? "\r\n" : "\n";
-        var block = SummaryWriter.Generate(BacklogParser.Parse(md), DateOnly.FromDateTime(DateTime.Now))
-            .Replace("\n", eol);
-        return md[..start] + block + md[(end + SummaryWriter.EndMarker.Length)..];
+    private void TryDeleteFolder(string folder)
+    {
+        // The index entry is already gone, so a failure here leaves an unreferenced folder — which
+        // Sync reports as a warning — rather than a story pointing at nothing.
+        try { StoryFolder.Delete(resolveSkills(), folder); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        catch (BacklogValidationException) { }
     }
 
-    private static string Read(string path) => File.ReadAllText(path);
-    private static void Write(string path, string md) => File.WriteAllText(path, md, Utf8NoBom);
+    private static string Require(string? value, string message, int max)
+    {
+        value = (value ?? "").Trim();
+        if (value.Length == 0) throw new BacklogValidationException(message);
+        if (value.Length > max) throw new BacklogValidationException($"Keep this under {max} characters.");
+        return value;
+    }
 }

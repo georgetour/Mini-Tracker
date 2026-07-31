@@ -3,15 +3,19 @@ using MiniTracker.Api.Services;
 
 namespace MiniTracker.Tests;
 
+/// <summary>
+/// Guards the bundled starter content, which is also the first-run demo. If any of this breaks,
+/// a fresh clone shows a broken board on its very first screen.
+/// </summary>
 public class TemplateFileTests
 {
     [Fact]
     public void TemplateLocator_finds_the_backlog_template()
     {
-        var path = TemplateLocator.Find("BACKLOG.template.md");
+        var path = TemplateLocator.Find("BACKLOG.template.yaml");
 
         Assert.True(File.Exists(path));
-        Assert.EndsWith(Path.Combine("templates", "BACKLOG.template.md"), path);
+        Assert.EndsWith(Path.Combine("templates", "BACKLOG.template.yaml"), path);
     }
 
     [Fact]
@@ -28,11 +32,16 @@ public class TemplateFileTests
 
     private static readonly string[] AllStatuses =
     {
-        "Not Yet Started", "Under Review", "Refined", "In Progress", "Vendor Test", "Done", "On Hold"
+        "Not Yet Started", "Under Review", "Refined", "In Progress", "Vendor Test", "Done", "On Hold",
     };
 
+    private static string TemplatesDir() =>
+        Path.GetDirectoryName(TemplateLocator.Find("BACKLOG.template.yaml"))!;
+
+    private static string SkillsDir() => Path.Combine(TemplatesDir(), "skills");
+
     private static Board Template() =>
-        BacklogParser.Parse(File.ReadAllText(TemplateLocator.Find("BACKLOG.template.md")));
+        YamlIndex.Parse(File.ReadAllText(TemplateLocator.Find("BACKLOG.template.yaml")));
 
     [Fact]
     public void Backlog_template_has_five_epics_with_expected_story_counts()
@@ -59,66 +68,74 @@ public class TemplateFileTests
     [Fact]
     public void Backlog_template_exercises_all_seven_statuses()
     {
-        var used = Template().Epics.SelectMany(e => e.Stories).Select(s => s.Status.Label).ToHashSet();
+        var used = Template().Epics.SelectMany(e => e.Stories).Select(s => s.Status).ToHashSet();
 
         Assert.All(AllStatuses, label => Assert.Contains(label, used));
     }
 
     [Fact]
-    public void Backlog_template_covers_both_test_case_table_shapes_and_the_validation_heading()
-    {
-        var stories = Template().Epics.SelectMany(e => e.Stories).ToDictionary(s => s.Code);
-
-        // Shape B: "| ID | Description | Status | Notes |"
-        Assert.Contains(stories["US-01"].TestCases, tc => tc.Id == "TC-01-01");
-        // Shape A: "| TC | Verifies | Scenario | Status |"
-        Assert.Contains(stories["US-04"].TestCases, tc => tc.Id == "TC-04-1");
-        // "### Validation" heading instead of "### Test Cases"
-        Assert.Contains(stories["US-09"].TestCases, tc => tc.Id == "TC-09-01");
-    }
-
-    [Fact]
-    public void Every_story_has_tasks_and_test_cases()
+    public void Every_story_folder_exists_with_all_three_files()
     {
         Assert.All(Template().Epics.SelectMany(e => e.Stories), s =>
         {
-            Assert.NotEmpty(s.Tasks);
-            Assert.NotEmpty(s.TestCases);
+            var dir = Path.Combine(SkillsDir(), s.Folder);
+            Assert.True(Directory.Exists(dir), $"{s.Code} points at '{s.Folder}', which is not in templates/skills.");
+            Assert.True(File.Exists(Path.Combine(dir, "SKILL.md")), $"{s.Folder} has no SKILL.md");
+            Assert.True(File.Exists(Path.Combine(dir, "tasks.yaml")), $"{s.Folder} has no tasks.yaml");
+            Assert.True(File.Exists(Path.Combine(dir, "test-cases.yaml")), $"{s.Folder} has no test-cases.yaml");
         });
     }
 
     [Fact]
-    public void Every_skill_referenced_by_the_template_exists_on_disk()
+    public void Every_story_ships_tasks_and_test_cases()
     {
-        var templatesDir = Path.GetDirectoryName(TemplateLocator.Find("BACKLOG.template.md"))!;
-
-        var referenced = Template().Epics.SelectMany(e => e.Stories)
-            .Where(s => !string.IsNullOrWhiteSpace(s.SkillPath))
-            .Select(s => s.SkillPath!)
-            .Distinct()
-            .ToList();
-
-        Assert.NotEmpty(referenced);
-        Assert.All(referenced, rel =>
-            Assert.True(File.Exists(Path.Combine(templatesDir, rel)),
-                $"Story references '{rel}' but templates/{rel} does not exist — the demo's skill link would 404."));
+        Assert.All(Template().Epics.SelectMany(e => e.Stories), s =>
+        {
+            var detail = StoryFolder.Read(SkillsDir(), s.Folder);
+            Assert.NotEmpty(detail.Tasks);
+            Assert.NotEmpty(detail.TestCases);
+        });
     }
 
     [Fact]
-    public void Template_ships_no_orphaned_skill_files()
+    public void Template_ships_no_orphaned_story_folders()
     {
-        var templatesDir = Path.GetDirectoryName(TemplateLocator.Find("BACKLOG.template.md"))!;
-        var skillsDir = Path.Combine(templatesDir, "skills");
+        var referenced = Template().Epics.SelectMany(e => e.Stories).Select(s => s.Folder).ToHashSet();
 
-        var onDisk = Directory.GetFiles(skillsDir, "SKILL.md", SearchOption.AllDirectories)
-            .Select(p => Path.GetRelativePath(templatesDir, p).Replace('\\', '/'))
-            .ToHashSet();
+        var onDisk = Directory.GetDirectories(SkillsDir())
+            .Select(d => Path.GetFileName(d)!).ToHashSet();
 
-        var referenced = Template().Epics.SelectMany(e => e.Stories)
-            .Where(s => !string.IsNullOrWhiteSpace(s.SkillPath))
-            .Select(s => s.SkillPath!.Replace('\\', '/'))
-            .ToHashSet();
+        Assert.Equal(referenced.OrderBy(x => x), onDisk.OrderBy(x => x));
+    }
 
-        Assert.Equal(onDisk.OrderBy(x => x), referenced.OrderBy(x => x));
+    [Fact]
+    public void The_shipped_template_validates_clean()
+    {
+        // This is the demo a fresh clone sees. If it does not validate, the first screen is an error.
+        var report = BacklogValidation.Check(TemplateLocator.Find("BACKLOG.template.yaml"), SkillsDir());
+
+        Assert.True(report.Ok, string.Join("\n", report.Issues.Select(i => $"{i.Severity}: {i.Message}")));
+    }
+
+    [Fact]
+    public void The_template_has_a_readme_explaining_the_folder_layout()
+    {
+        var readme = Path.Combine(SkillsDir(), "README.md");
+
+        Assert.True(File.Exists(readme), "skills/README.md is how an agent learns the structure.");
+        var text = File.ReadAllText(readme);
+        Assert.Contains("tasks.yaml", text);
+        Assert.Contains("test-cases.yaml", text);
+    }
+
+    [Fact]
+    public void Every_release_used_by_a_story_is_declared_in_the_roadmap()
+    {
+        var board = Template();
+
+        var used = board.Epics.SelectMany(e => e.Stories)
+            .Select(s => s.Release).Where(r => !string.IsNullOrWhiteSpace(r)).Distinct();
+
+        Assert.All(used, r => Assert.Contains(r, board.Roadmap));
     }
 }

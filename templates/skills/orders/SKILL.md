@@ -39,13 +39,6 @@ Owned by US-08 (Orders).
 - [ ] AC4: Cancelling a Pending order sets its status to Cancelled and records the transition.
 - [ ] AC5: Attempting to cancel an order that is not Pending is rejected with a clear message.
 
-## Test Cases
-
-| Test Case | Traces to | Input | Expected Result |
-|---|---|---|---|
-| TC-08-01 | AC2 | Request the order list as a signed-in customer | Only that customer's own orders are returned |
-| TC-08-02 | AC4 | Cancel an order while it is Pending | The order's status becomes Cancelled |
-
 ## Technical Reference
 
 See `@detailed-designs/orders.md` for the full status set (Pending, Paid, Shipped, Delivered,

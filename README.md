@@ -1,25 +1,27 @@
 # Mini Tracker
 
-A minimal Jira/Azure-DevOps-style backlog and skills tracker, built around UI/UX simplicity.
+A minimal Jira/Azure-DevOps-style backlog tracker, built around UI/UX simplicity.
 
-It's a small web board over one `BACKLOG.md` file. Click a status, and it's saved to the file
-straight away — no save button, no database, no account.
+It's a small web board over plain files in your project. Click a status and it's saved straight
+away — no save button, no database, no account.
 
 ![The board](docs/screenshots/board.png)
 
-![Story detail](docs/screenshots/story.png)
+Responsive down to 320px — the same board on a phone, with the destinations moved to a bottom bar:
+
+<img src="docs/screenshots/mobile.png" alt="On a narrow screen" width="380">
 
 ## Setup
 
-**You need one thing:**  [Download .NET 9 or higher](https://dotnet.microsoft.com/download).
+**You need one thing to install:** [.NET 9 or higher](https://dotnet.microsoft.com/download).
 
-Check if you have it in terminal or powershell:
+Check what you have:
 
 ```bash
 dotnet --version
 ```
 
-If that prints `9.` or higher, you're ready. Then:
+If that prints `9.` or higher, you're ready:
 
 ```bash
 git clone https://github.com/georgetour/Mini-Tracker.git
@@ -27,162 +29,225 @@ cd Mini-Tracker
 dotnet run --project src/MiniTracker.Api
 ```
 
-Open **http://localhost:5249** in your browser. It's the same address every time.
+Open **http://localhost:5249**. It's the same address every time. To stop it, press `Ctrl+C` in the
+terminal.
 
-That's the whole setup. There's nothing to install, configure, or sign up for — the first run works
-immediately with demo content so you can see what it does before pointing it at anything of yours.
+That's the whole setup. Nothing to install, configure or sign up for — the first run shows a demo
+project with 5 epics and 24 stories so you can click around before pointing it at anything of yours.
+The demo is a real, editable copy, and it's gitignored, so nothing you do to it is at stake.
 
-**To stop it:** press `Ctrl+C` in the terminal.
+## Where everything is stored
 
-You'll see a demo project with 5 epics and 24 stories. Click around — it's a real, editable copy, so
-nothing is at stake.
-
-### Where your changes are saved
-
-**Everything is written to one markdown file.** There is no database and no hidden storage.
-
-Until you point Mini Tracker at your own project, that file is the bundled demo:
+There are only three kinds of file. No database, no hidden state.
 
 ```
-src/MiniTracker.Api/data/BACKLOG.demo.md
+BACKLOG.yaml                     the index — every epic and story, and its status
+skills/
+  README.md                      explains the layout to anyone (or anything) reading the folder
+  checkout-and-payment/          one folder per story, named after the story
+    SKILL.md                     what the story IS — description, acceptance criteria
+    tasks.yaml                   what has to be BUILT, and whether it's done
+    test-cases.yaml              what has to be VERIFIED, and whether it passed
 ```
 
-So when you add an epic, change a status, or tick a task, that file changes on disk immediately —
-open it in your editor and you'll see it. Skill files live beside it in
-`src/MiniTracker.Api/data/skills/`.
+**`BACKLOG.yaml` is an index, deliberately.** It holds epics, stories, their status and which folder
+each story owns — and nothing else. That's what lets the board open instantly no matter how much
+detail your stories carry: drawing the board never opens a single story folder.
 
-Both are ignored by git, so the demo you scribble on never ends up in a commit. Once you point
-Configure at your own `BACKLOG.md`, everything is written there instead — and that file is yours to
-commit.
+**Each story owns a folder.** Everything about that one story lives in it. Point a coding agent at
+`skills/checkout-and-payment/` and it has the whole picture — the prose, the work, the checks —
+without reading anything else.
+
+**Why two files for tasks and test cases?** They're different questions. Tasks answer *is it built*;
+test cases answer *does it work*. They're written at different times by different people, so ticking
+a task never rewrites your test results.
+
+## What each action writes
+
+Every button maps to exactly one file. Nothing writes to two places at once.
+
+| What you do | What changes on disk |
+|---|---|
+| Add an epic | `BACKLOG.yaml` — a new epic, numbered for you |
+| Add a story | `BACKLOG.yaml` — a new story, plus a new `skills/<story>/` folder with a starter `SKILL.md` |
+| Rename an epic | `BACKLOG.yaml` — the title only; its stories are untouched |
+| Change a story's status | `BACKLOG.yaml` — one line |
+| Add / edit / delete / tick a task | `skills/<story>/tasks.yaml` |
+| Add / delete a test case, or change its result | `skills/<story>/test-cases.yaml` |
+| Edit a description | `skills/<story>/SKILL.md` |
+| Delete a story | `BACKLOG.yaml` — the entry — and then its whole folder |
+| Delete an epic | `BACKLOG.yaml` — the epic — and the folders of every story in it |
+| Upload a logo, change paths | `tracker.config.json` (settings only — never your backlog) |
+| **Reload from file** | **nothing** — it re-reads and checks your files |
+| **Stage in git** | **nothing** — it runs `git add` on your backlog |
+
+Notice what's *not* there: changing a status never touches a story's tasks, and ticking a task never
+touches the backlog. That's why two people editing different things don't collide.
+
+**Until you point it at your own project**, all of that happens inside
+`src/MiniTracker.Api/data/`, which is gitignored. Your scribbling on the demo can't end up in a commit.
 
 ## Use it with your own project
 
-1. Go to **http://localhost:5249/configure** (or click **⚙ Configure** in the top bar).
-2. In **Backlog file**, type where your `BACKLOG.md` is — for example `C:/projects/my-app/BACKLOG.md`.
-   *If the file doesn't exist yet, Mini Tracker creates it for you.*
-3. In **Skills folder**, type the folder your `skills/...` paths start from — for example
-   `C:/projects/my-app`. Leave it empty if you don't use skill files.
+1. Go to **http://localhost:5249/configure** (or click **⚙** in the top bar).
+2. In **Backlog file**, type where your `BACKLOG.yaml` is — for example
+   `C:/projects/my-app/BACKLOG.yaml`. *If it doesn't exist yet, Mini Tracker creates it for you.*
+3. In **Skills folder**, type the folder that holds your story folders — for example
+   `C:/projects/my-app/skills`.
 4. Click **Save changes**. Your board loads.
 
-Your settings are remembered in `tracker.config.json` next to the app. It's never committed to git.
+Your settings live in `tracker.config.json` next to the app, and are never committed.
 
-## The screen, explained
+**Already have a `BACKLOG.md`?** Earlier versions kept everything in one markdown file. Convert it:
 
-The window has three parts: a **top bar** across the top, a **sidebar** down the left, and the
-**main area** filling the rest.
-
-### Top bar — actions
-
-- **Logo** (far left) — while it's an empty `+` box, clicking it takes you to Configure so you can
-  upload one. Once a logo is set, clicking it goes back to the Overview, like any website logo.
-- **＋ Add Epic** — goes to `/add-epic`. Type a title, that's all. The epic number is assigned for
-  you, the same way a database assigns an ID.
-- **＋ Add User Story** — goes to `/add-story`. Pick which epic it belongs to and type a title. The
-  `US-` code is assigned for you.
-- **⚙ Configure** — goes to `/configure`. Choose which `BACKLOG.md` to use, which skills folder, and
-  your logo.
-- **Reload from file** — re-reads `BACKLOG.md` from disk. Use it after editing the file by hand or
-  pulling from git. It does **not** save anything; your clicks were already saved.
-- **Stage in git** — runs `git add BACKLOG.md` so the change is ready for your next commit. It never
-  commits and never pushes.
-- **◐** — switches between light and dark.
-- **☰** — appears only on narrow windows. Slides the sidebar in; click outside or press `Esc` to
-  close it.
-
-### Sidebar — finding things
-
-- **Overview** — every epic with its stories. This is the home screen.
-- **By release** — the same stories grouped by version (V1, V2 …) instead of by epic. Useful for
-  "what's left before we ship?"
-- **An epic name** — opens that epic on its own, where every story is shown expanded with its tasks
-  and test cases.
-- **▾ / ▸** next to an epic — shows or hides that epic's stories in the sidebar.
-- **A story name** — jumps straight to that story.
-- **‹ / ›** at the top — collapses the sidebar to narrow icons and back, for more reading room.
-
-### Main area — doing the work
-
-- **A story title** — opens that story: its description, tasks, test cases and progress bars.
-- **A status chip** (`In Progress`, `Done` …) — click it, pick a new status from the list. Written to
-  `BACKLOG.md` immediately.
-- **A task checkbox** — ticks a task off. Written immediately.
-- **A test-case chip** (`Not Run` / `Passed` / `Failed`) — the same, for that test case.
-- **✎ Edit** on a story's Description — opens that story's `SKILL.md` in a text editor. **Save**
-  writes the file, **Cancel** throws the changes away.
-
-**Nothing here has a save button, on purpose** — every click is written to the file as you make it.
-The one exception is the `SKILL.md` editor, where you're writing prose and should decide yourself
-when it's finished.
-
-## Writing your BACKLOG.md
-
-The quickest start is to copy `templates/BACKLOG.template.md`. If you'd rather write your own, this is
-the whole format:
-
-```markdown
-# Epic 0: Your Epic Title
-
-## US-01 · Your Story Title
-
-> **Status**: 🔄 In Progress · **Skill**: `skills/your-area/SKILL.md` · **Release**: V1
-
-### Tasks
-
-| # | Task | ✓ |
-|---|------|---|
-| 1.0 | Something to do | ⬜ |
-
-### Test Cases
-
-| ID | Description | Status | Notes |
-|----|-------------|--------|-------|
-| TC-01-01 | Something to check | ⬜ Not Run | |
+```bash
+dotnet run --project src/MiniTracker.Api -- migrate path/to/BACKLOG.md
 ```
 
-**Statuses:** ⬜ Not Yet Started · 🔍 Under Review · ✨ Refined · 🔄 In Progress · 🧪 Vendor Test ·
-✅ Done · ⏸ On Hold
+That writes `BACKLOG.yaml` beside it and one folder per story. It never overwrites an existing
+`BACKLOG.yaml` or a `SKILL.md` you already wrote, and your `BACKLOG.md` is left exactly as it was.
 
-**Tasks:** ⬜ or ✅ **Test cases:** ⬜ Not Run · ✅ Passed · ❌ Failed
+## Writing the files by hand
 
-`**Skill**:` is optional — use it on stories that have a written spec.
+They're plain text and they're yours. The quickest start is to copy `templates/BACKLOG.template.yaml`
+and `templates/skills/`, but this is the whole format.
+
+**`BACKLOG.yaml`**
+
+```yaml
+project: My Project
+roadmap: [V0.1, V1]
+
+epics:
+  - number: 0
+    title: Your Epic Title
+    stories:
+      - code: US-01
+        title: Your Story Title
+        status: In Progress
+        release: V1
+        folder: your-story-title
+```
+
+**`skills/your-story-title/tasks.yaml`**
+
+```yaml
+- text: Something to build
+  done: false
+```
+
+**`skills/your-story-title/test-cases.yaml`**
+
+```yaml
+- text: Something to check
+  status: Not Run
+```
+
+**`skills/your-story-title/SKILL.md`** is ordinary markdown — whatever you want the story to say.
+
+**Statuses:** Not Yet Started · Under Review · Refined · In Progress · Vendor Test · Done · On Hold
+
+**Test-case results:** Not Run · Passed · Failed
+
+Write them as plain words. The emoji you see on screen are added by the app, not stored in the file.
+
+If you get the YAML wrong, **Reload from file** tells you the file and the line, rather than showing
+you an empty board.
 
 ## Why it's built this way
 
-- **No database.** Your `BACKLOG.md` is the data. It's already in git, with full history.
+- **No database.** Your files are the data. They're already in git, with full history.
 - **No cost.** No licences, no seats, no hosting.
 - **No setup.** One command. No Node, no npm, no build step.
-- **Readable diffs.** A click changes exactly one value in the file and leaves everything else alone.
-- **Still just markdown.** Edit it by hand, review it in a pull request, grep it.
+- **Readable diffs.** A click changes one value and leaves the rest of the file alone.
+- **Still just files.** Edit them by hand, review them in a pull request, grep them.
 
 > Mini Tracker runs on localhost and has no login. Don't expose it on a public network.
 
 ## How it works
 
 ```
-Browser                          C# (ASP.NET Core)
-─────────────────────────        ─────────────────────────
-index.html, app.css, app.js  ◄── served as static files
+Browser                                C# (ASP.NET Core)
+────────────────────────────           ──────────────────────────────────────────
+index.html, app.css, app.js  ◄──       served as static files
       │
-      ├─ GET  /api/board     ──►  read + parse BACKLOG.md
-      └─ POST /api/story/…   ──►  change one status in the file
+      ├─ GET  /api/board          ──►  BACKLOG.yaml — epics and stories only
+      ├─ GET  /api/story/US-01    ──►  that story folder's tasks and test cases
+      ├─ POST /api/story/…/status ──►  one line in BACKLOG.yaml
+      ├─ PUT  /api/story/…/tasks  ──►  that story's tasks.yaml
+      └─ GET  /api/validate       ──►  check every file, report line numbers
 ```
 
-C# handles the file: reading it, changing one value at a time, and updating the summary counts.
-The browser handles the screen, using [Alpine.js](https://alpinejs.dev) — 60 KB, shipped with the
-app, no CDN, no npm, no build step. Every screen is written as ordinary HTML in `index.html`;
-Alpine fills it in from the JSON the API returns.
+The board reads only the index, so it stays fast however much detail your stories carry. A story's
+tasks and test cases are fetched when you open it, and not before.
 
-It uses Alpine's CSP build, so the app can send a strict `Content-Security-Policy`: no inline
-scripts, no `eval`, nothing loaded from another site. Text from your files is written to the page as
-text, never as markup, so a backlog can't inject anything into the page.
+Writes are whole-file: read, change, write back. One writer, so nothing more elaborate is needed,
+and the output is stable enough that one status change is one line in `git diff`.
 
 ```
 src/MiniTracker.Api/
-├── Backlog/    read, write and summarise BACKLOG.md
-├── Services/   settings and file lookup
-└── wwwroot/    the screen — index.html, app.css, app.js, vendor/alpine-csp.min.js
-templates/      starter BACKLOG.md and SKILL.md files
-tests/          test suite
+├── Backlog/         reading and writing BACKLOG.yaml and the story folders
+│   └── Legacy/      importing an old BACKLOG.md — nothing else uses it
+├── Services/        settings, path resolution
+└── wwwroot/         the screen — index.html, app.css, app.js, vendor/alpine-csp.min.js
+templates/           a starter BACKLOG.yaml and skills/ folder
+tests/               test suite
+```
+
+## Technologies
+
+| | | |
+|---|---|---|
+| **.NET 9** | ASP.NET Core Minimal API | the only thing you install |
+| **YamlDotNet** 18.1 | reads and writes the files | one NuGet package |
+| **Alpine.js** (CSP build) | 60 KB, vendored | no CDN, works offline |
+| `app.js` | 43 KB | state, routing, API calls |
+| `app.css` | 36 KB | one stylesheet |
+| `index.html` | 38 KB | every screen, as plain HTML |
+| C# | 1,776 lines | across the whole backend |
+| Tests | 183 | `dotnet test` |
+
+No Node, no npm, no bundler, no build step. Two dependencies in total.
+
+If you landed here looking for either of those in practice, this is a working reference for both:
+**YamlDotNet** round-tripping a real file deterministically enough that one edit is one line of
+`git diff`, and **Alpine's CSP build** driving a whole app under a strict `Content-Security-Policy`
+with no `eval` and no inline scripts. Both are lightly documented elsewhere.
+
+Alpine's CSP build lets the app send a strict `Content-Security-Policy` — no inline scripts, no
+`eval`, nothing loaded from another site. Text from your files reaches the page as text, never as
+markup.
+
+**Responsive down to 320px.** Below 900px the sidebar becomes a drawer; below 768px it's gone and a
+bottom bar carries the destinations with the add action raised in the centre. Nothing scrolls
+sideways at any width. Add it to your phone's home screen and it behaves like an app.
+
+## Performance
+
+Measured against a synthetic backlog of **1,000 stories across 50 epics** — 3,000 story files —
+driven for 5 minutes with a realistic mix of reading, ticking and writing. 7,225 operations, zero
+errors. Milliseconds:
+
+| Action | p50 | p95 | p99 |
+|---|---|---|---|
+| Open a story | 19 | 32 | 45 |
+| Load the board | 20 | 31 | 52 |
+| Tick a task | 39 | 55 | 77 |
+| Add a task | 39 | 56 | 88 |
+| Set a test result | 39 | 53 | 81 |
+| Change a status | 46 | 87 | 111 |
+| Check every file (Sync) | 236 | 267 | 498 |
+
+Opening a story costs the same at 1,000 stories as at 20, because it reads one folder rather than
+the backlog. Keeping tasks and test cases in the index instead measured **270 ms per board load
+against 20 ms** — which is why they aren't in it.
+
+Reproduce it yourself:
+
+```bash
+node tests/perf/generate.js /tmp/perf 50 20     # 50 epics × 20 stories
+dotnet run -c Release --project src/MiniTracker.Api -- --BacklogPath=/tmp/perf/BACKLOG.yaml
+node tests/perf/drive.js http://localhost:5249 300
 ```
 
 ## Run the tests
@@ -191,13 +256,23 @@ tests/          test suite
 dotnet test
 ```
 
-## Fixing the summary counts by hand
+## Roadmap
 
-Your `BACKLOG.md` has a generated block between `<!-- STATUS-SUMMARY:START -->` and `:END -->` that
-counts stories by status, version and epic. Mini Tracker updates it whenever you click something.
+**Next release — v1.0**, after testing and confirmation.
 
-If you edit the file by hand, those counts go out of date. This command recalculates them:
+- Dockerfile, so it runs anywhere without installing .NET
+- A devcontainer, so it opens straight in GitHub Codespaces
 
-```bash
-dotnet run --project src/MiniTracker.Api -- sync-status
-```
+**Later, if people find it useful.**
+
+- User management, for teams sharing one backlog
+- A self-hosted mode with authentication
+
+Both of those are real work rather than a promise: multiple users means solving concurrent writes
+first, and an account system means holding credentials that a local tool never has to. They're worth
+doing if there's demand, and not worth doing on a guess.
+
+---
+
+MIT licensed — see [LICENSE](LICENSE). Mini Tracker is an independent project with no connection to
+Atlassian or Microsoft; Jira and Azure DevOps are their trademarks.

@@ -1,9 +1,10 @@
+using MiniTracker.Api.Backlog;
+
 namespace MiniTracker.Api.Services;
 
 /// <summary>
-/// Resolves a story's recorded skill path (e.g. "skills/backlog-tooling/", read verbatim from
-/// BACKLOG.md's "**Skill**:" field) to an absolute SKILL.md path under the configured skills root —
-/// the folder those recorded paths are relative to. Rejects anything that would escape that root.
+/// Resolves a story's skill path (e.g. "backlog-board/SKILL.md", sent by the browser) to an absolute
+/// path under the configured skills root. Returns null for anything that would escape that root.
 /// </summary>
 public static class SkillFileResolver
 {
@@ -16,10 +17,14 @@ public static class SkillFileResolver
             trimmed = Path.Combine(trimmed, "SKILL.md");
 
         var rootFull = Path.GetFullPath(skillsRoot);
-        var rootWithSep = rootFull.EndsWith(Path.DirectorySeparatorChar)
-            ? rootFull : rootFull + Path.DirectorySeparatorChar;
 
-        var candidate = Path.GetFullPath(Path.Combine(rootFull, trimmed));
-        return candidate.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) ? candidate : null;
+        string candidate;
+        try { candidate = Path.GetFullPath(Path.Combine(rootFull, trimmed)); }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
+        { return null; }
+
+        // Shared with StoryFolder.Dir so the two cannot drift apart — see PathSafety for why this
+        // is not a string prefix comparison.
+        return PathSafety.IsInside(rootFull, candidate) ? candidate : null;
     }
 }

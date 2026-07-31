@@ -44,16 +44,16 @@ public sealed class TrackerConfigService(string configPath)
         lock (_lock) File.WriteAllText(configPath, JsonSerializer.Serialize(config, SaveOpts));
     }
 
-    /// <summary>Points the tracker at <paramref name="path"/>. If nothing exists there yet, creates it
-    /// from the bundled BACKLOG.md template first — this is what lets Configure start tracking a
-    /// brand-new project. Always clears IsDemo, since this is a deliberate user choice.</summary>
+    /// <summary>Points the tracker at <paramref name="path"/>. If nothing exists there yet, creates
+    /// it from the bundled template first — this is what lets Configure start tracking a brand-new
+    /// project. Always clears IsDemo, since this is a deliberate user choice.</summary>
     public TrackerConfig SetBacklogPath(string path)
     {
         var full = ValidateBacklogPath(path);
         if (!File.Exists(full))
         {
             Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-            File.Copy(TemplateLocator.Find("BACKLOG.template.md"), full);
+            File.Copy(TemplateLocator.Find("BACKLOG.template.yaml"), full);
         }
         var next = Load() with { BacklogPath = full, IsDemo = false };
         Save(next);
@@ -68,9 +68,11 @@ public sealed class TrackerConfigService(string configPath)
     {
         path = (path ?? "").Trim();
         if (path.Length == 0)
-            throw new BacklogValidationException("Enter the path to your BACKLOG.md file.");
-        if (!path.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
-            throw new BacklogValidationException("Point this at a .md file, for example C:/projects/my-app/BACKLOG.md.");
+            throw new BacklogValidationException("Enter the path to your BACKLOG.yaml file.");
+        if (!path.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) &&
+            !path.EndsWith(".yml", StringComparison.OrdinalIgnoreCase))
+            throw new BacklogValidationException(
+                "Point this at a .yaml file, for example C:/projects/my-app/BACKLOG.yaml.");
 
         string full;
         try { full = Path.GetFullPath(path); }
@@ -138,19 +140,20 @@ public sealed class TrackerConfigService(string configPath)
             Directory.CreateDirectory(demoDir);
 
             if (!File.Exists(demoPath))
-                File.Copy(TemplateLocator.Find("BACKLOG.template.md"), demoPath);
+                File.Copy(TemplateLocator.Find("BACKLOG.template.yaml"), demoPath);
 
-            // Stories record skill paths as "skills/<slug>/SKILL.md", resolved relative to SkillsPath —
-            // so the demo directory itself is the root, giving <demoDir>/skills/<slug>/SKILL.md.
-            var templatesDir = Path.GetDirectoryName(TemplateLocator.Find("BACKLOG.template.md"))!;
+            // A story's "folder" is resolved under SkillsPath, so the demo's skills directory is
+            // that root: <demoDir>/skills/<folder>/{SKILL.md,tasks.yaml,test-cases.yaml}.
+            var templatesDir = Path.GetDirectoryName(TemplateLocator.Find("BACKLOG.template.yaml"))!;
             CopyDirectory(Path.Combine(templatesDir, "skills"), Path.Combine(demoDir, "skills"));
 
             var current = Load();
             // Only adopt the demo directory as SkillsPath when the user hasn't configured a real one
             // (or we're already in demo mode) — otherwise a backlog that's temporarily missing (moved
             // folder, unmounted drive) would silently clobber a real SkillsPath on fall-through.
+            // A story's folder is now a bare name ("backlog-board"), so the root is skills/ itself.
             var skillsPath = (string.IsNullOrWhiteSpace(current.SkillsPath) || current.IsDemo)
-                ? Path.GetFullPath(demoDir)
+                ? Path.GetFullPath(Path.Combine(demoDir, "skills"))
                 : current.SkillsPath;
             var next = current with { BacklogPath = demoPath, SkillsPath = skillsPath, IsDemo = true };
             Save(next);

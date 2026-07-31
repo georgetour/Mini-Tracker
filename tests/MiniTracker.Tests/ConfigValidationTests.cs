@@ -28,17 +28,26 @@ public class ConfigValidationTests : IDisposable
     [InlineData("C:/projects/app/BACKLOG.txt")]
     [InlineData("C:/projects/app/BACKLOG")]
     [InlineData("C:/projects/app/notes.markdown")]
-    public void Backlog_path_must_be_a_markdown_file(string path)
+    [InlineData("C:/projects/app/BACKLOG.md")]   // the old format is no longer accepted
+    public void Backlog_path_must_be_a_yaml_file(string path)
     {
         var ex = Assert.Throws<BacklogValidationException>(() => TrackerConfigService.ValidateBacklogPath(path));
-        Assert.Contains(".md file", ex.Message);
+        Assert.Contains(".yaml file", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("C:/projects/app/BACKLOG.yaml")]
+    [InlineData("C:/projects/app/backlog.yml")]
+    public void Backlog_path_accepts_either_yaml_extension(string path)
+    {
+        Assert.Equal(Path.GetFullPath(path), TrackerConfigService.ValidateBacklogPath(path));
     }
 
     [Fact]
     public void Backlog_path_rejects_an_existing_folder()
     {
         // A folder named like a file is the realistic mistake this guards against.
-        var folder = Path.Combine(_dir, "BACKLOG.md");
+        var folder = Path.Combine(_dir, "BACKLOG.yaml");
         Directory.CreateDirectory(folder);
 
         var ex = Assert.Throws<BacklogValidationException>(() => TrackerConfigService.ValidateBacklogPath(folder));
@@ -48,7 +57,7 @@ public class ConfigValidationTests : IDisposable
     [Fact]
     public void Backlog_path_accepts_a_valid_file_and_returns_it_absolute()
     {
-        var path = Path.Combine(_dir, "sub", "BACKLOG.md");
+        var path = Path.Combine(_dir, "sub", "BACKLOG.yaml");
 
         var result = TrackerConfigService.ValidateBacklogPath(path);
 
@@ -59,7 +68,7 @@ public class ConfigValidationTests : IDisposable
     [Fact]
     public void Backlog_path_accepts_uppercase_extension()
     {
-        var path = Path.Combine(_dir, "BACKLOG.MD");
+        var path = Path.Combine(_dir, "BACKLOG.YAML");
         Assert.Equal(Path.GetFullPath(path), TrackerConfigService.ValidateBacklogPath(path));
     }
 
@@ -86,7 +95,7 @@ public class ConfigValidationTests : IDisposable
     [Fact]
     public void Skills_path_rejects_a_file()
     {
-        var file = Path.Combine(_dir, "notes.md");
+        var file = Path.Combine(_dir, "notes.yaml");
         File.WriteAllText(file, "x");
 
         var ex = Assert.Throws<BacklogValidationException>(() => TrackerConfigService.ValidateSkillsPath(file));
@@ -109,7 +118,7 @@ public class ConfigValidationTests : IDisposable
         var configPath = Path.Combine(_dir, "tracker.config.json");
         var svc = new TrackerConfigService(configPath);
 
-        Assert.Throws<BacklogValidationException>(() => svc.SetBacklogPath("not-a-markdown-file.txt"));
+        Assert.Throws<BacklogValidationException>(() => svc.SetBacklogPath("not-a-yaml-file.txt"));
         Assert.False(File.Exists(configPath));
     }
 

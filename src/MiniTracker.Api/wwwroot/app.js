@@ -26,8 +26,9 @@ const TC_STATUSES = [
   { label:"Passed",  emoji:"✅", cls:"st-done" },
   { label:"Failed",  emoji:"❌", cls:"st-fail" },
 ];
-const CLASS_FOR = {};
-STATUSES.concat(TC_STATUSES).forEach(s => { CLASS_FOR[s.label] = s.cls; });
+// The files store a plain word — "In Progress". The emoji is presentation and lives only here.
+const CLASS_FOR = {}, EMOJI_FOR = {};
+STATUSES.concat(TC_STATUSES).forEach(s => { CLASS_FOR[s.label] = s.cls; EMOJI_FOR[s.label] = s.emoji; });
 
 /** Ranks statuses by how much attention an epic is getting — the rule the roll-up's 📍 uses. */
 const ACTIVITY = { "In Progress":5, "Vendor Test":4, "Under Review":3, "Refined":2, "Not Yet Started":1, "Done":0, "On Hold":0 };
@@ -57,34 +58,20 @@ async function api(path, method, body){
 }
 
 /**
- * Turns the server's board into the shape the markup binds to: every label, class name, bar width
- * and heading is computed once, here. The CSP build cannot format strings in an attribute, and
- * even if it could, doing it per binding would recompute on every keystroke elsewhere on the page.
+ * Turns the index into the shape the markup binds to: every label and class name is computed once,
+ * here. The CSP build cannot format strings in an attribute, and even if it could, doing it per
+ * binding would recompute on every keystroke elsewhere on the page.
+ *
+ * The board carries no tasks or test cases — those live in each story's folder and arrive from
+ * /api/story/{code} only when that story is opened. That is what keeps this fast as the backlog
+ * grows: nothing above the story page ever parses detail it does not render.
  */
 function decorate(board){
   const epics = (board.epics || []).map(epic => {
-    const stories = (epic.stories || []).map(story => {
-      const tasks = story.tasks || [];
-      const tcs = story.testCases || [];
-      const tDone = tasks.filter(t => t.done).length;
-      const pass = tcs.filter(t => t.status.label === "Passed").length;
-      const fail = tcs.filter(t => t.status.label === "Failed").length;
-
-      return Object.assign({}, story, {
-        statusClass: CLASS_FOR[story.status.label] || "st-nys",
-        taskLabel:   tDone + "/" + tasks.length,
-        taskBar:     width(pct(tDone, tasks.length)),
-        tasksHeading:"TASKS · " + tDone + "/" + tasks.length,
-        tcLabel:     pass + "/" + tcs.length,
-        tcFail:      fail,
-        tcFailLabel: " · " + fail + " ✗",
-        tcPassBar:   width(pct(pass, tcs.length)),
-        tcFailBar:   width(pct(fail, tcs.length)),
-        tcHeading:   "TEST CASES · " + pass + "/" + tcs.length,
-        tasks: tasks.map(t => Object.assign({}, t, { mark: t.done ? "✓" : "", textClass: t.done ? "done" : "" })),
-        testCases: tcs.map(t => Object.assign({}, t, { statusClass: CLASS_FOR[t.status.label] || "st-nys" })),
-      });
-    });
+    const stories = (epic.stories || []).map(story => Object.assign({}, story, {
+      statusClass: CLASS_FOR[story.status] || "st-nys",
+      emoji:       EMOJI_FOR[story.status] || "⬜",
+    }));
 
     const count = stories.length;
     return Object.assign({}, epic, {
@@ -92,7 +79,7 @@ function decorate(board){
       countLabel:  plural(count, "story", "stories"),
       optionLabel: epic.number + " — " + epic.title,
       railTitle:   epic.title + " · " + plural(count, "story", "stories"),
-      activity:    Math.max(0, ...stories.map(s => ACTIVITY[s.status.label] || 0)),
+      activity:    Math.max(0, ...stories.map(s => ACTIVITY[s.status] || 0)),
       isCurrent:   false,
     });
   });
@@ -102,7 +89,16 @@ function decorate(board){
   epics.forEach(e => { if(e.activity > best){ best = e.activity; chosen = e; } });
   if(chosen) chosen.isCurrent = true;
 
-  return { epics, roadmapVersions: board.roadmapVersions || [] };
+  return { project: board.project || "", epics, roadmap: board.roadmap || [] };
+}
+
+/** Adds the display fields to one story's tasks and test cases, once per load. */
+function decorateDetail(detail){
+  const tasks = (detail.tasks || []).map(t => Object.assign({}, t));
+  const testCases = (detail.testCases || []).map(t => Object.assign({}, t, {
+    statusClass: CLASS_FOR[t.status] || "st-nys",
+  }));
+  return { tasks, testCases, loading: false, error: "" };
 }
 
 /**
@@ -225,7 +221,10 @@ document.addEventListener("alpine:init", () => {
   Alpine.data("tracker", () => ({
 
     /* ------------------------------------------------------------ state -- */
-    board: { epics: [], roadmapVersions: [] },
+    board: { project:"", epics: [], roadmap: [] },
+    detail: { tasks: [], testCases: [], loading: false, error: "" },
+    addingTask: false, addingTest: false, editingTask: -1, draftText: "",
+    report: { show:false, title:"", cls:"", issues:[] },
     config: { backlogPath:null, skillsPath:null, logoPath:null },
     loadError: "",
 
@@ -280,10 +279,41 @@ document.addEventListener("alpine:init", () => {
       catch(e){ /* non-fatal: the board is already usable, and Configure can still be opened */ }
     },
 
+    /**
+     * Sync. Splitting storage across an index and one folder per story made it possible for the two
+     * to disagree — a story naming a folder that is not there, a folder nobody references, a file
+     * that will not parse. That class of bug was impossible when it was all one file, so this
+     * button pays it back: it checks the whole backlog and says exactly what is wrong and where.
+     */
     async reload(){
-      try{ await this.load(); this.toast("Reloaded from BACKLOG.md"); }
-      catch(e){ this.toast("Could not reload the file"); }
+      try{
+        const report = await api("/api/validate");
+        const issues = report.issues || [];
+        const errors = issues.filter(i => i.severity === "error").length;
+        const warnings = issues.length - errors;
+
+        this.report = {
+          show: issues.length > 0,
+          cls: report.ok ? "warn" : "bad",
+          title: report.ok
+            ? plural(warnings, "thing worth a look", "things worth a look")
+            : plural(errors, "problem stopping the backlog loading", "problems stopping the backlog loading"),
+          issues: issues.map(i => Object.assign({}, i, {
+            sevClass: i.severity === "error" ? "sev-bad" : "sev-warn",
+          })),
+        };
+
+        if(!report.ok) return this.toast("The backlog has errors");
+
+        await this.load();
+        if(this.view === "story") await this.loadDetail();
+        this.toast(issues.length ? "Reloaded — with warnings" : "Reloaded from BACKLOG.yaml");
+      }catch(e){
+        this.toast("Could not read the backlog");
+      }
     },
+
+    dismissReport(){ this.report.show = false; },
 
     async stage(){
       try{ await api("/api/git/stage", "POST"); this.toast("Staged (git add)"); }
@@ -351,6 +381,7 @@ document.addEventListener("alpine:init", () => {
         if(!story) return this.resetToBoard();
         this.storyCode = story.code;
         this.show("story", false);
+        this.loadDetail();
         return this.loadSkill();
       }
 
@@ -403,6 +434,7 @@ document.addEventListener("alpine:init", () => {
     openStory(story){
       this.storyCode = story.code;
       this.show("story");
+      this.loadDetail();
       this.loadSkill();
     },
 
@@ -495,7 +527,7 @@ document.addEventListener("alpine:init", () => {
 
     /** Groups stories by release tag, ordered by the roadmap; unscheduled last. */
     releaseGroups(){
-      const order = this.board.roadmapVersions;
+      const order = this.board.roadmap;
       const map = new Map();
       this.epics.forEach(e => e.stories.forEach(s => {
         const key = s.release || "Unscheduled";
@@ -556,24 +588,44 @@ document.addEventListener("alpine:init", () => {
     get story(){ return this.storyByCode(this.storyCode); },
     get storyEpic(){ return this.epics.find(e => e.stories.some(s => s.code === this.storyCode)) || null; },
     get storyTitle(){ return this.story ? this.story.title : ""; },
-    get storyCodeLabel(){ return this.storyCode || ""; },
     get storyRelease(){ return this.story ? this.story.release : ""; },
     get storyStatusClass(){ return this.story ? this.story.statusClass : ""; },
-    get storyStatusLabel(){ return this.story ? this.story.status.label : ""; },
-    get storyEmoji(){ return this.story ? this.story.status.emoji : ""; },
-    get storyTasks(){ return this.story ? this.story.tasks : []; },
-    get storyTestCases(){ return this.story ? this.story.testCases : []; },
-    get detailTaskLabel(){ return this.story ? this.story.taskLabel : ""; },
-    get detailTaskBar(){ return this.story ? this.story.taskBar : "width:0%"; },
-    get detailTcLabel(){ return this.story ? this.story.tcLabel : ""; },
-    get detailTcFail(){ return this.story ? this.story.tcFail : 0; },
-    get detailTcFailLabel(){ return this.story ? this.story.tcFailLabel : ""; },
-    get detailTcPassBar(){ return this.story ? this.story.tcPassBar : "width:0%"; },
-    get detailTcFailBar(){ return this.story ? this.story.tcFailBar : "width:0%"; },
-    get detailTasksHeading(){ return this.story ? this.story.tasksHeading : ""; },
-    get detailTcHeading(){ return this.story ? this.story.tcHeading : ""; },
+    get storyStatusLabel(){ return this.story ? this.story.status : ""; },
+    get storyEmoji(){ return this.story ? this.story.emoji : ""; },
+
+    // Tasks and test cases come from the story's folder, not the board.
+    get storyTasks(){ return this.detail.tasks; },
+    get storyTestCases(){ return this.detail.testCases; },
+    get doneCount(){ return this.detail.tasks.filter(t => t.done).length; },
+    get tcPass(){ return this.detail.testCases.filter(t => t.status === "Passed").length; },
+    get tcFail(){ return this.detail.testCases.filter(t => t.status === "Failed").length; },
+    get detailTaskLabel(){ return this.doneCount + "/" + this.detail.tasks.length; },
+    get detailTaskBar(){ return width(pct(this.doneCount, this.detail.tasks.length)); },
+    get detailTcLabel(){ return this.tcPass + "/" + this.detail.testCases.length; },
+    get detailTcFail(){ return this.tcFail; },
+    get detailTcFailLabel(){ return " · " + this.tcFail + " ✗"; },
+    get detailTcPassBar(){ return width(pct(this.tcPass, this.detail.testCases.length)); },
+    get detailTcFailBar(){ return width(pct(this.tcFail, this.detail.testCases.length)); },
+    get detailTasksHeading(){ return "TASKS · " + this.detailTaskLabel; },
+    get detailTcHeading(){ return "TEST CASES · " + this.detailTcLabel; },
 
     boxClass(task){ return task.done ? "on" : ""; },
+    taskMark(task){ return task.done ? "✓" : ""; },
+    taskTextClass(task){ return task.done ? "done" : ""; },
+
+    async loadDetail(){
+      this.detail = { tasks: [], testCases: [], loading: true, error: "" };
+      const code = this.storyCode;
+      try{
+        const d = await api("/api/story/" + encodeURIComponent(code));
+        if(this.storyCode !== code) return;   // another story was opened while this was in flight
+        this.detail = decorateDetail(d);
+      }catch(e){
+        if(this.storyCode !== code) return;
+        this.detail = { tasks: [], testCases: [], loading: false,
+                        error: e.message || "This story's files could not be read." };
+      }
+    },
 
     /* ----------------------------------------------------------- writes -- */
     async write(path, body, message){
@@ -582,13 +634,117 @@ document.addEventListener("alpine:init", () => {
         this.toast(message);
       }catch(e){ this.toast(e.message || "That change could not be saved"); }
     },
-    toggleTask(story, task){
-      this.write("/api/story/" + story.code + "/task/" + task.id, { done: !task.done }, "Saved");
+
+    /* ----------------------------------------- tasks and test cases ------ */
+    /** One call covers add, edit, delete, reorder and toggle: the client sends the list it wants
+     *  the file to hold, so there is no per-item addressing to drift out of step. */
+    async saveTasks(tasks, message){
+      try{
+        const d = await api("/api/story/" + encodeURIComponent(this.storyCode) + "/tasks", "PUT",
+                            { tasks: tasks.map(t => ({ text: t.text, done: t.done })) });
+        this.detail = decorateDetail(d);
+        this.toast(message);
+      }catch(e){ this.toast(e.message || "That change could not be saved."); }
+    },
+
+    async saveTestCases(cases, message){
+      try{
+        const d = await api("/api/story/" + encodeURIComponent(this.storyCode) + "/test-cases", "PUT",
+                            { testCases: cases.map(c => ({ text: c.text, status: c.status })) });
+        this.detail = decorateDetail(d);
+        this.toast(message);
+      }catch(e){ this.toast(e.message || "That change could not be saved."); }
+    },
+
+    async toggleTask(i){
+      const tasks = this.detail.tasks.map(t => Object.assign({}, t));
+      tasks[i].done = !tasks[i].done;
+      await this.saveTasks(tasks, "Saved");
+    },
+
+    /** Long text would push the buttons off a phone screen, so the prompt quotes just enough of it
+     *  to identify which row you are about to lose. */
+    shorten(text){
+      const t = (text || "").trim();
+      return t.length > 90 ? t.slice(0, 90).trimEnd() + "…" : t;
+    },
+
+    async removeTask(i){
+      const task = this.detail.tasks[i];
+      if(!task) return;
+
+      const ok = await this.ask("Delete this task?",
+        "“" + this.shorten(task.text) + "” will be removed from tasks.yaml.", "Delete task");
+      if(!ok) return;
+
+      await this.saveTasks(this.detail.tasks.filter((_, j) => j !== i), "Task deleted");
+    },
+
+    async removeTestCase(i){
+      const tc = this.detail.testCases[i];
+      if(!tc) return;
+
+      const ok = await this.ask("Delete this test case?",
+        "“" + this.shorten(tc.text) + "” will be removed from test-cases.yaml.", "Delete test case");
+      if(!ok) return;
+
+      await this.saveTestCases(this.detail.testCases.filter((_, j) => j !== i), "Test case deleted");
+    },
+
+    /* --------------------------------------------- inline add and edit --- */
+    // A task is one field with no URL of its own, so it is edited in place. Multi-field creates —
+    // an epic, a story — still get a real page.
+    startAddTask(){ this.cancelEdit(); this.addingTask = true; this.focusRef("newTask"); },
+    startAddTest(){ this.cancelEdit(); this.addingTest = true; this.focusRef("newTest"); },
+    cancelEdit(){ this.addingTask = false; this.addingTest = false; this.editingTask = -1; this.draftText = ""; },
+
+    focusRef(name){
+      this.$nextTick(() => { if(this.$refs[name]) this.$refs[name].focus(); });
+    },
+
+    startEditTask(i){
+      this.cancelEdit();
+      this.editingTask = i;
+      this.draftText = this.detail.tasks[i].text;
+      this.focusRef("editTask");
+    },
+
+    async commitEditTask(){
+      const i = this.editingTask;
+      if(i < 0) return;
+      const text = this.draftText.trim();
+      this.editingTask = -1;
+      this.draftText = "";
+      if(!text || text === this.detail.tasks[i].text) return;
+
+      const tasks = this.detail.tasks.map(t => Object.assign({}, t));
+      tasks[i].text = text;
+      await this.saveTasks(tasks, "Task updated");
+    },
+
+    async commitAddTask(){
+      const text = this.draftText.trim();
+      if(!text) return this.cancelEdit();
+      this.draftText = "";
+      const tasks = this.detail.tasks.map(t => Object.assign({}, t));
+      tasks.push({ text, done: false });
+      await this.saveTasks(tasks, "Task added");
+      this.focusRef("newTask");            // stay open so several can be typed in a row
+    },
+
+    async commitAddTest(){
+      const text = this.draftText.trim();
+      if(!text) return this.cancelEdit();
+      this.draftText = "";
+      const cases = this.detail.testCases.map(c => Object.assign({}, c));
+      cases.push({ text, status: "Not Run" });
+      await this.saveTestCases(cases, "Test case added");
+      this.focusRef("newTest");
     },
 
     /* --------------------------------------------------- status picker -- */
-    openStatusPicker(story, el){ this.openPicker(el, STATUSES, story.status.label, "story", story, null); },
-    openTestPicker(story, tc, el){ this.openPicker(el, TC_STATUSES, tc.status.label, "tc", story, tc); },
+    openStatusPicker(story, el){ this.openPicker(el, STATUSES, story.status, "story", story, null); },
+    openTestPicker(i, el){ this.openPicker(el, TC_STATUSES, this.detail.testCases[i].status, "tc", null, i); },
 
     openPicker(el, options, current, kind, story, tc){
       const r = el.getBoundingClientRect();
@@ -610,25 +766,33 @@ document.addEventListener("alpine:init", () => {
     choose(option){
       const p = this.picker;
       this.picker.open = false;
-      const body = { emoji: option.emoji, label: option.label };
-      if(p.kind === "story") this.write("/api/story/" + p.story.code + "/status", body, "Saved");
-      else this.write("/api/story/" + p.story.code + "/testcase/" + p.tc.id, body, "Saved");
+
+      if(p.kind === "story"){
+        this.write("/api/story/" + p.story.code + "/status", { status: option.label }, "Saved");
+        return;
+      }
+      const cases = this.detail.testCases.map(c => Object.assign({}, c));
+      cases[p.tc].status = option.label;
+      this.saveTestCases(cases, "Saved");
     },
 
     /* ------------------------------------------------------ description -- */
     get skillReading(){ return !!this.skill.path && !this.skill.editing && !this.skill.loading && !this.skill.error; },
-    get skillMissing(){ return !this.skill.path && !this.skill.loading && !this.skill.error; },
 
     async loadSkill(){
       const story = this.story;
-      this.skill = { path: story ? story.skillPath : null, original:"", draft:"", html:"", editing:false, loading:false, saving:false, error:"" };
-      if(!this.skill.path) return;
+      // The description is always <folder>/SKILL.md — created with the story, so there is no
+      // "this story has no description" state left to handle.
+      const path = story ? story.folder + "/SKILL.md" : null;
+      this.skill = { path, original:"", draft:"", html:"", editing:false, loading:false, saving:false, error:"" };
+      if(!path) return;
 
       this.skill.loading = true;
       try{
-        const res = await fetch("/api/skill?path=" + encodeURIComponent(this.skill.path));
+        const res = await fetch("/api/skill?path=" + encodeURIComponent(path));
         const text = await res.text();
         if(!res.ok) throw new Error(text || "This description could not be opened.");
+        if(this.skill.path !== path) return;      // a different story was opened meanwhile
         this.skill.original = text;
         this.skill.html = renderMarkdown(text);
       }catch(e){
@@ -638,25 +802,9 @@ document.addEventListener("alpine:init", () => {
       }
     },
 
-    /**
-     * Opens the editor for the story on screen. A story with no description gets its markdown file
-     * created first — writing one should not mean a detour through Configure or the file system.
-     */
-    async editDescription(){
-      if(this.skill.path){
-        this.skill.draft = this.skill.original;
-        this.skill.editing = true;
-        return;
-      }
-      try{
-        const res = await fetch("/api/story/" + encodeURIComponent(this.storyCode) + "/skill", { method:"POST" });
-        if(!res.ok) throw new Error((await res.text()) || "The description file could not be created.");
-        const created = await res.json();
-        this.board = decorate(created.board);
-        await this.loadSkill();
-        this.skill.draft = this.skill.original;
-        this.skill.editing = true;
-      }catch(e){ this.toast(e.message || "The description file could not be created."); }
+    editDescription(){
+      this.skill.draft = this.skill.original;
+      this.skill.editing = true;
     },
 
     cancelDescription(){ this.skill.editing = false; this.skill.draft = ""; },

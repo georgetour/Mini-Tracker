@@ -1,39 +1,43 @@
 namespace MiniTracker.Api.Backlog;
 
-/// <summary>The whole board, parsed from BACKLOG.md. FileHash lets callers detect external edits.</summary>
-/// <param name="RoadmapVersions">Versions declared in the Release Roadmap table (e.g. V0.1, V1 …) — seeds
-/// the "By version" rollup so a roadmap version with zero stories still shows.</param>
+/// <summary>
+/// The index: every epic and story, and nothing else. Tasks and test cases live in each story's own
+/// folder and are loaded only when that story is opened — which is what keeps a 1000-story board at
+/// ~35ms. Holding them here instead measured 270ms, because every board load parsed detail the
+/// board never renders.
+/// </summary>
 public sealed record Board(
-    IReadOnlyList<Epic> Epics,
-    IReadOnlyList<string> RoadmapVersions,
-    string FileHash);
+    string Project,
+    IReadOnlyList<string> Roadmap,
+    IReadOnlyList<Epic> Epics);
 
-/// <param name="Slug">URL segment for this epic, e.g. "core-application". Assigned by the parser
-/// via <see cref="Slugs"/> and unique across the board — the browser builds links from it rather
-/// than deriving its own.</param>
+/// <param name="Slug">URL segment, e.g. "core-application". Derived from the title by
+/// <see cref="Slugs"/> on every read — never stored in the file, so it can't drift from the title.</param>
 public sealed record Epic(int Number, string Title, IReadOnlyList<Story> Stories)
 {
     public string Slug { get; init; } = "";
 }
 
+/// <param name="Status">A plain word: "In Progress", "Done". No emoji — those are presentation and
+/// live in the browser.</param>
+/// <param name="Folder">Directory under the skills root holding this story's SKILL.md, tasks.yaml
+/// and test-cases.yaml. Stored in the file, unlike the slug, because renaming a story must not
+/// silently orphan its folder.</param>
 public sealed record Story(
-    string Code,          // e.g. "US-21"
+    string Code,
     string Title,
-    StatusToken Status,   // authoritative status from the "> **Status**:" line
-    string Release,       // e.g. "V0.1"
-    string? SkillPath,    // e.g. "skills/backlog-tracker/SKILL.md" — set once, when a story is first
-                          // given a spec; the file's contents are the story's description
-    IReadOnlyList<TaskItem> Tasks,
-    IReadOnlyList<TestCase> TestCases,
-    int StatusLine)       // 0-based line index of the "> **Status**:" line (write locator)
+    string Status,
+    string Release,
+    string Folder)
 {
-    /// <summary>URL segment for this story, unique within its epic — "checkout-and-payment".</summary>
     public string Slug { get; init; } = "";
 }
 
-public sealed record TaskItem(string Id, string Text, bool Done, int Line);
+public sealed record TaskItem(string Text, bool Done);
 
-public sealed record TestCase(string Id, string Description, StatusToken Status, int Line);
+public sealed record TestCase(string Text, string Status);
 
-/// <summary>Emoji + label pair, e.g. ("🔍", "Under Review"). The label is what sync-status keys off.</summary>
-public sealed record StatusToken(string Emoji, string Label);
+/// <summary>What a story's folder holds. Loaded on demand, never with the board.</summary>
+public sealed record StoryDetail(
+    IReadOnlyList<TaskItem> Tasks,
+    IReadOnlyList<TestCase> TestCases);

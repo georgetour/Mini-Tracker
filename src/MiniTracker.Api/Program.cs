@@ -1,29 +1,49 @@
 using System.Diagnostics;
 using System.Text;
 using MiniTracker.Api.Backlog;
+using MiniTracker.Api.Backlog.Legacy;
 using MiniTracker.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 var trackerConfigService = new TrackerConfigService(
     Path.Combine(builder.Environment.ContentRootPath, "tracker.config.json"));
-var demoBacklogPath = Path.Combine(builder.Environment.ContentRootPath, "data", "BACKLOG.demo.md");
+var demoBacklogPath = Path.Combine(builder.Environment.ContentRootPath, "data", "BACKLOG.demo.yaml");
 var overridePath = builder.Configuration["BacklogPath"];
 
 string ResolveBacklogPath() => trackerConfigService.ResolveBacklogPath(overridePath, demoBacklogPath);
 
-// CLI mode: `dotnet run -- sync-status` regenerates the STATUS-SUMMARY and exits.
+// Story folders sit beside the backlog unless Configure says otherwise, so a project that has
+// never been configured still finds its own skills/ directory rather than the app's.
+string ResolveSkillsPath() => trackerConfigService.Load().SkillsPath
+    ?? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(ResolveBacklogPath()))!, "skills");
+
+// CLI mode: `dotnet run -- migrate <BACKLOG.md> [output.yaml]` imports an old markdown backlog.
 // Pure C#, cross-platform — no external tooling required.
-if (args.Length > 0 && args[0] == "sync-status")
+if (args.Length > 0 && args[0] == "migrate")
 {
-    var cliService = new BacklogService(ResolveBacklogPath);
-    cliService.SyncStatus();
-    Console.WriteLine($"Status synced: {cliService.BacklogPath}");
+    var source = args.Length > 1 ? args[1] : "BACKLOG.md";
+    var target = args.Length > 2 ? args[2] : Path.ChangeExtension(Path.GetFullPath(source), ".yaml");
+    var skillsOut = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(target))!, "skills");
+
+    try
+    {
+        var result = MarkdownMigrator.Run(source, target, skillsOut);
+        Console.WriteLine($"Migrated {result.Stories} stories across {result.Epics} epics.");
+        Console.WriteLine($"Wrote {target}");
+        Console.WriteLine($"Wrote {result.FoldersCreated} story folders under {skillsOut}");
+        foreach (var note in result.Notes) Console.WriteLine($"  note: {note}");
+    }
+    catch (BacklogValidationException e)
+    {
+        Console.Error.WriteLine(e.Message);
+        Environment.ExitCode = 1;
+    }
     return;
 }
 
 builder.Services.AddSingleton(trackerConfigService);
-builder.Services.AddSingleton(new BacklogService(ResolveBacklogPath));
+builder.Services.AddSingleton(new BacklogService(ResolveBacklogPath, ResolveSkillsPath));
 
 var app = builder.Build();
 // Dynamic data must never be cached: a stale board would show statuses that are no longer in the
@@ -75,16 +95,53 @@ app.UseStaticFiles(new StaticFileOptions
 // Files first, then routes.
 app.UseRouting();
 
-app.MapGet("/api/board", (BacklogService svc) => Results.Json(svc.GetBoard()));
+// The index only — no tasks, no test cases. That is what keeps the board fast no matter how much
+// detail the story folders hold. If the file will not parse, hand back the validation report so the
+// UI can say which line is wrong instead of showing an empty board.
+app.MapGet("/api/board", (BacklogService svc) =>
+{
+    try { return Results.Json(svc.GetBoard()); }
+    catch (Exception) { return Results.Json(svc.Validate(), statusCode: 422); }
+});
+
+app.MapGet("/api/story/{code}", (string code, BacklogService svc) =>
+{
+    try { return Results.Json(svc.GetStory(code)); }
+    catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
+});
 
 app.MapPost("/api/story/{code}/status", (string code, StatusRequest r, BacklogService svc) =>
-    Results.Json(svc.SetStoryStatus(code, new StatusToken(r.Emoji, r.Label))));
+{
+    try { return Results.Json(svc.SetStoryStatus(code, r.Status)); }
+    catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
+});
 
-app.MapPost("/api/story/{code}/task/{taskId}", (string code, string taskId, TaskRequest r, BacklogService svc) =>
-    Results.Json(svc.SetTaskDone(code, taskId, r.Done)));
+// Tasks and test cases are replaced wholesale: the client sends the list it wants the file to hold.
+// Add, edit, delete, reorder and toggle are all this one call, so there is no per-item addressing
+// to drift out of step when a stale tab posts an index that has since moved.
+app.MapPut("/api/story/{code}/tasks", (string code, TaskListRequest r, BacklogService svc) =>
+{
+    try
+    {
+        svc.SetTasks(code, r.Tasks ?? new List<TaskItem>());
+        return Results.Json(svc.GetStory(code));
+    }
+    catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
+});
 
-app.MapPost("/api/story/{code}/testcase/{tcId}", (string code, string tcId, StatusRequest r, BacklogService svc) =>
-    Results.Json(svc.SetTestCaseStatus(code, tcId, new StatusToken(r.Emoji, r.Label))));
+app.MapPut("/api/story/{code}/test-cases", (string code, TestCaseListRequest r, BacklogService svc) =>
+{
+    try
+    {
+        svc.SetTestCases(code, r.TestCases ?? new List<TestCase>());
+        return Results.Json(svc.GetStory(code));
+    }
+    catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
+});
+
+// What Sync reports: parse errors with a line number, plus the index-versus-folders integrity
+// checks that splitting storage made possible in the first place.
+app.MapGet("/api/validate", (BacklogService svc) => Results.Json(svc.Validate()));
 
 // Optional convenience: `git add` the resolved backlog file. Never commits.
 app.MapPost("/api/git/stage", (BacklogService svc) =>
@@ -145,9 +202,12 @@ app.MapPost("/api/config/logo", async (HttpRequest req, TrackerConfigService cfg
     return Results.Json(cfg.SetLogoPath($"/uploads/{savedName}"));
 });
 
-app.MapGet("/api/skill", (string path, TrackerConfigService cfg) =>
+// Both skill endpoints resolve the skills root the same way BacklogService does. Reading it
+// straight from config instead meant a backlog configured without an explicit skills folder could
+// load its tasks and test cases but not its descriptions — two answers to one question.
+app.MapGet("/api/skill", (string path) =>
 {
-    var skillsRoot = cfg.Load().SkillsPath;
+    var skillsRoot = ResolveSkillsPath();
     if (string.IsNullOrWhiteSpace(skillsRoot)) return Results.NotFound("No skills folder configured.");
 
     var resolved = SkillFileResolver.Resolve(skillsRoot, path);
@@ -158,9 +218,9 @@ app.MapGet("/api/skill", (string path, TrackerConfigService cfg) =>
 
 // Saves an edited SKILL.md. Only writes inside the configured skills folder, and only over a file
 // that already exists — this endpoint edits specs, it does not create arbitrary files on disk.
-app.MapPost("/api/skill", (SaveSkillRequest r, TrackerConfigService cfg) =>
+app.MapPost("/api/skill", (SaveSkillRequest r) =>
 {
-    var skillsRoot = cfg.Load().SkillsPath;
+    var skillsRoot = ResolveSkillsPath();
     if (string.IsNullOrWhiteSpace(skillsRoot)) return Results.BadRequest("No skills folder is configured yet.");
 
     var resolved = SkillFileResolver.Resolve(skillsRoot, r.Path);
@@ -185,7 +245,7 @@ app.MapPost("/api/epic", (AddEpicRequest r, BacklogService svc) =>
 
 app.MapPost("/api/story", (AddStoryRequest r, BacklogService svc) =>
 {
-    try { return Results.Json(svc.AddStory(r.EpicNumber, r.Code, r.Title, r.Release, r.SkillPath)); }
+    try { return Results.Json(svc.AddStory(r.EpicNumber, r.Code, r.Title, r.Release)); }
     catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
 });
 
@@ -207,74 +267,8 @@ app.MapDelete("/api/story/{code}", (string code, BacklogService svc) =>
     catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
 });
 
-// Gives a story a SKILL.md when it has none: creates the file from the template, then records the
-// path in BACKLOG.md. Idempotent — if the story already points at a file that exists, nothing is
-// written and the existing path comes back, so this can never overwrite someone's spec.
-app.MapPost("/api/story/{code}/skill", (string code, BacklogService svc, TrackerConfigService cfg) =>
-{
-    var skillsRoot = cfg.Load().SkillsPath;
-    if (string.IsNullOrWhiteSpace(skillsRoot))
-        return Results.BadRequest("Set a skills folder in Configure first, then try again.");
-
-    var stories = svc.GetBoard().Epics.SelectMany(e => e.Stories).ToList();
-    var story = stories.FirstOrDefault(s => s.Code == code);
-    if (story is null) return Results.BadRequest($"There is no story {code}.");
-
-    var relative = string.IsNullOrWhiteSpace(story.SkillPath)
-        ? $"{SkillFolderPrefix(stories)}{Slug(code, story.Title)}/SKILL.md"
-        : story.SkillPath;
-
-    var resolved = SkillFileResolver.Resolve(skillsRoot, relative);
-    if (resolved is null) return Results.BadRequest("That skill path points outside the skills folder.");
-
-    try
-    {
-        if (!File.Exists(resolved))
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(resolved)!);
-            var template = File.ReadAllText(TemplateLocator.Find("SKILL.template.md"))
-                .Replace("skill-name-here", Slug(code, story.Title))
-                .Replace("# [Skill Name]", $"# {story.Code} · {story.Title}");
-            File.WriteAllText(resolved, template, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        }
-
-        var board = string.IsNullOrWhiteSpace(story.SkillPath)
-            ? svc.SetStorySkill(code, relative)
-            : svc.GetBoard();
-        return Results.Json(new { path = relative, board });
-    }
-    catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
-    catch (IOException) { return Results.BadRequest("The skill file could not be created. Check the folder is writable."); }
-    catch (UnauthorizedAccessException) { return Results.BadRequest("The skills folder is not writable."); }
-});
-
-// A new description file should sit beside the existing ones. Backlogs written from the template
-// record paths as "skills/<name>/SKILL.md", but a project may use its own folder — so the prefix is
-// copied from whatever the other stories already use, and only falls back to "skills/".
-static string SkillFolderPrefix(IEnumerable<Story> stories)
-{
-    foreach (var path in stories.Select(s => s.SkillPath).Where(p => !string.IsNullOrWhiteSpace(p)))
-    {
-        var segments = path!.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length >= 3) return segments[0] + "/";   // <folder>/<name>/SKILL.md
-        if (segments.Length == 2) return "";                  // <name>/SKILL.md — already flat
-    }
-    return "skills/";
-}
-
-// "US-07", "Checkout basket" -> "us-07-checkout-basket" — a folder name that stays readable and
-// sorts with the backlog.
-static string Slug(string code, string title)
-{
-    var text = $"{code} {title}".ToLowerInvariant();
-    var sb = new StringBuilder();
-    foreach (var ch in text)
-    {
-        if (char.IsLetterOrDigit(ch)) sb.Append(ch);
-        else if (sb.Length > 0 && sb[^1] != '-') sb.Append('-');
-    }
-    return sb.ToString().Trim('-') is { Length: > 0 } s ? s : "skill";
-}
+// There is no "create a skill file" endpoint any more: adding a story creates its folder and its
+// SKILL.md from the template in the same call, so there is never a story without one.
 
 // ---------------------------------------------------------------------------------------------
 // Page routes. The server owns the route table: which URLs exist, and whether the thing a URL
@@ -307,7 +301,7 @@ app.MapGet("/releases/{tag}", (string tag, BacklogService svc) =>
     var board = svc.GetBoard();
     var used = board.Epics.SelectMany(e => e.Stories)
         .Select(s => string.IsNullOrWhiteSpace(s.Release) ? "Unscheduled" : s.Release);
-    return ShellOr404(used.Contains(tag) || board.RoadmapVersions.Contains(tag));
+    return ShellOr404(used.Contains(tag) || board.Roadmap.Contains(tag));
 });
 
 // The hierarchy itself is the path: /core-application, then /core-application/checkout-and-payment.
@@ -326,10 +320,11 @@ app.MapGet("/{epicSlug}/{storySlug}", (string epicSlug, string storySlug, Backlo
 
 app.Run();
 
-record StatusRequest(string Emoji, string Label);
-record TaskRequest(bool Done);
+record StatusRequest(string Status);
+record TaskListRequest(List<TaskItem> Tasks);
+record TestCaseListRequest(List<TestCase> TestCases);
 record PathRequest(string Path);
 record AddEpicRequest(int Number, string Title);
-record AddStoryRequest(int EpicNumber, string Code, string Title, string? Release, string? SkillPath);
+record AddStoryRequest(int EpicNumber, string Code, string Title, string? Release);
 record SaveSkillRequest(string Path, string Content);
 record RenameRequest(string Title);

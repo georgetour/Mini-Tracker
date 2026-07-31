@@ -38,14 +38,6 @@ Owned by US-04 (User Management).
 - [ ] AC4: A signed-in customer can view and edit their display name.
 - [ ] AC5: A customer who has forgotten their password can reset it via an emailed link.
 
-## Test Cases
-
-| Test Case | Traces to | Input | Expected Result |
-|---|---|---|---|
-| TC-04-1 | AC1 | Register with a new email | Account created, customer signed in |
-| TC-04-2 | AC2 | Register with an email already in use | Clear error shown, no duplicate account created |
-| TC-04-3 | AC3 | Sign out | Session ends; protected pages redirect to sign-in |
-
 ## Technical Reference
 
 See `@detailed-designs/user-management.md` for the account data model, password hashing and reset

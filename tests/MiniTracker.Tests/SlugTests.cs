@@ -79,54 +79,61 @@ public class SlugTests
         Assert.Equal(new[] { "configure" }, slugs);
     }
 
-    // ---------- as wired into the parser ----------
+    // ---------- as wired into the index ----------
 
-    private const string Md =
-        "# Backlog\n\n" +
-        "# Epic 0: Core Application\n\n" +
-        "## US-01 · Checkout and Payment\n\n" +
-        "> **Status**: ⬜ Not Yet Started\n\n" +
-        "# Epic 1: Core Application\n\n" +
-        "## US-02 · Checkout and Payment\n\n" +
-        "> **Status**: ⬜ Not Yet Started\n";
+    private const string Yaml = """
+        project: Test
+        epics:
+          - number: 0
+            title: Core Application
+            stories:
+              - code: US-01
+                title: Checkout and Payment
+                folder: checkout-and-payment
+          - number: 1
+            title: Core Application
+            stories:
+              - code: US-02
+                title: Checkout and Payment
+                folder: checkout-and-payment-2
+        """;
 
     [Fact]
-    public void Parser_gives_every_epic_and_story_a_slug()
+    public void The_index_gives_every_epic_and_story_a_slug()
     {
-        var board = BacklogParser.Parse(Md);
+        var board = YamlIndex.Parse(Yaml);
 
         Assert.Equal("core-application", board.Epics[0].Slug);
         Assert.Equal("checkout-and-payment", board.Epics[0].Stories[0].Slug);
     }
 
     [Fact]
-    public void Parser_keeps_epic_slugs_unique_across_the_board()
+    public void Epic_slugs_are_unique_across_the_board()
     {
-        var board = BacklogParser.Parse(Md);
+        var board = YamlIndex.Parse(Yaml);
 
         Assert.Equal("core-application", board.Epics[0].Slug);
         Assert.Equal("core-application-2", board.Epics[1].Slug);
     }
 
     [Fact]
-    public void Parser_scopes_story_slugs_to_their_epic()
+    public void Story_slugs_are_scoped_to_their_epic()
     {
-        // Same story title in two epics is not a clash: the paths differ by their first segment.
-        var board = BacklogParser.Parse(Md);
+        // The same story title in two epics is not a clash: the paths differ by their first segment.
+        var board = YamlIndex.Parse(Yaml);
 
         Assert.Equal("checkout-and-payment", board.Epics[0].Stories[0].Slug);
         Assert.Equal("checkout-and-payment", board.Epics[1].Stories[0].Slug);
     }
 
     [Fact]
-    public void Slugs_survive_a_round_trip_through_the_sample_backlog()
+    public void Every_story_is_reachable_by_exactly_one_path()
     {
-        var board = BacklogParser.Parse(File.ReadAllText(TestBacklogLocator.Resolve()));
+        var board = YamlIndex.Parse(Yaml);
 
         Assert.All(board.Epics, e => Assert.NotEqual("", e.Slug));
         Assert.All(board.Epics.SelectMany(e => e.Stories), s => Assert.NotEqual("", s.Slug));
 
-        // Every story is reachable by exactly one /{epic}/{story} path.
         var paths = board.Epics.SelectMany(e => e.Stories.Select(s => $"/{e.Slug}/{s.Slug}")).ToList();
         Assert.Equal(paths.Count, paths.Distinct().Count());
     }

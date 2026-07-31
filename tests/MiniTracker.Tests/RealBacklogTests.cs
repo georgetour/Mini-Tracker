@@ -1,4 +1,4 @@
-using MiniTracker.Api.Backlog;
+using MiniTracker.Api.Backlog.Legacy;
 
 namespace MiniTracker.Tests;
 
@@ -20,7 +20,7 @@ public class RealBacklogTests
     [Fact]
     public void Finds_all_epics_with_expected_story_counts()
     {
-        var board = BacklogParser.Parse(SampleBacklog());
+        var board = MarkdownBacklogParser.Parse(SampleBacklog());
 
         var byNum = board.Epics.ToDictionary(e => e.Number, e => e.Stories.Count);
         Assert.Equal(2, byNum[0]);  // Epic 0 — Tracker Tooling (US-01, US-02)
@@ -33,37 +33,38 @@ public class RealBacklogTests
     [Fact]
     public void Total_of_9_stories_all_well_formed()
     {
-        var stories = BacklogParser.Parse(SampleBacklog()).Epics.SelectMany(e => e.Stories).ToList();
+        var stories = MarkdownBacklogParser.Parse(SampleBacklog()).Epics.SelectMany(e => e.Stories).ToList();
 
         Assert.Equal(9, stories.Count);
         Assert.All(stories, s =>
         {
             Assert.Matches(@"^US-\d+$", s.Code);
             Assert.False(string.IsNullOrWhiteSpace(s.Title));
-            Assert.Contains(s.Status.Label, Vocabulary);
-            Assert.True(s.StatusLine >= 0, $"{s.Code} has no status line");
+            Assert.Contains(s.StatusLabel, Vocabulary);
         });
     }
 
     [Fact]
     public void All_7_statuses_are_represented()
     {
-        var stories = BacklogParser.Parse(SampleBacklog()).Epics.SelectMany(e => e.Stories).ToList();
+        var stories = MarkdownBacklogParser.Parse(SampleBacklog()).Epics.SelectMany(e => e.Stories).ToList();
 
-        Assert.All(Vocabulary, label => Assert.Contains(stories, s => s.Status.Label == label));
+        Assert.All(Vocabulary, label => Assert.Contains(stories, s => s.StatusLabel == label));
     }
 
     [Fact]
     public void Parses_both_test_case_table_shapes_and_validation_heading()
     {
-        var stories = BacklogParser.Parse(SampleBacklog()).Epics.SelectMany(e => e.Stories)
+        var stories = MarkdownBacklogParser.Parse(SampleBacklog()).Epics.SelectMany(e => e.Stories)
             .ToDictionary(s => s.Code);
 
-        // Shape B: "| ID | Description | Status | Notes |"  (US-01)
-        Assert.Contains(stories["US-01"].TestCases, tc => tc.Id == "TC-01-01");
-        // Shape A: "| TC | Verifies | Scenario | Status |"  (US-03)
-        Assert.Contains(stories["US-03"].TestCases, tc => tc.Id == "TC-03-1");
-        // "### Validation" heading instead of "### Test Cases"  (US-04)
-        Assert.Contains(stories["US-04"].TestCases, tc => tc.Id == "TC-04-01");
+        // All three shapes must yield test cases with text and a recognised status. The old
+        // identifiers are gone: nothing addresses a test case by id any more.
+        Assert.NotEmpty(stories["US-01"].TestCases);   // "| ID | Description | Status | Notes |"
+        Assert.NotEmpty(stories["US-03"].TestCases);   // "| TC | Verifies | Scenario | Status |"
+        Assert.NotEmpty(stories["US-04"].TestCases);   // "### Validation" instead of "### Test Cases"
+
+        Assert.All(stories.Values.SelectMany(s => s.TestCases),
+            tc => Assert.False(string.IsNullOrWhiteSpace(tc.Text)));
     }
 }

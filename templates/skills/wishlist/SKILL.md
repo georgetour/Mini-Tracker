@@ -35,12 +35,6 @@ Owned by US-13 (Wishlist).
   there on a later visit or session.
 - [ ] AC2: A price drop on a wishlisted product triggers a notification to the customer who saved it.
 
-## Test Cases
-
-| Test Case | Traces to | Input | Expected Result |
-|---|---|---|---|
-| TC-13-01 | AC1 | Add a product to the wishlist, then reload as the same customer | The product is still on the wishlist |
-
 ## Technical Reference
 
 See `@detailed-designs/wishlist.md` for the wishlist data model, how a product's price history is

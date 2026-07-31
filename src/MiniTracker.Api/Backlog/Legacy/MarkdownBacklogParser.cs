@@ -1,20 +1,36 @@
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace MiniTracker.Api.Backlog;
+namespace MiniTracker.Api.Backlog.Legacy;
+
+/// <summary>What the markdown backlog held, in the shape the old file used. Only the migrator
+/// consumes these — the running app never sees them.</summary>
+public sealed record LegacyBoard(IReadOnlyList<LegacyEpic> Epics, IReadOnlyList<string> RoadmapVersions);
+
+public sealed record LegacyEpic(int Number, string Title, IReadOnlyList<LegacyStory> Stories);
+
+public sealed record LegacyStory(string Code, string Title, string StatusLabel, string Release,
+                                string? SkillPath, IReadOnlyList<LegacyTask> Tasks,
+                                IReadOnlyList<LegacyTestCase> TestCases);
+
+public sealed record LegacyTask(string Text, bool Done);
+
+public sealed record LegacyTestCase(string Text, string StatusLabel);
 
 /// <summary>
-/// Parses BACKLOG.md into a <see cref="Board"/>. Line-oriented and tolerant: rows are located by
-/// content signature and every editable item records its exact line so write-back can be surgical.
+/// The original BACKLOG.md reader, kept for one job only: importing a markdown backlog into the
+/// YAML layout via `dotnet run -- migrate`. Nothing in the running app calls this. It keeps its
+/// tests because the import has to stay trustworthy for anyone upgrading.
+///
+/// Line locators are gone — nothing writes markdown any more, so there is nothing to locate.
 /// </summary>
-public static partial class BacklogParser
+public static partial class MarkdownBacklogParser
 {
-    public static Board Parse(string markdown)
+    public static LegacyBoard Parse(string markdown)
     {
         var lines = markdown.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
 
-        var epics = new List<Epic>();
+        var epics = new List<LegacyEpic>();
         var roadmapVersions = new List<string>();
         EpicBuilder? epic = null;
         StoryBuilder? story = null;
@@ -66,8 +82,7 @@ public static partial class BacklogParser
             if (story is not null && StatusLine().IsMatch(line))
             {
                 var m = StatusLine().Match(line);
-                story.Status = new StatusToken(m.Groups[1].Value, m.Groups[2].Value.Trim());
-                story.StatusLine = i;
+                story.StatusLabel = m.Groups[2].Value.Trim();
                 var skill = SkillField().Match(line);
                 if (skill.Success) story.SkillPath = skill.Groups[1].Value.Trim();
                 var rel = ReleaseField().Match(line);
@@ -96,7 +111,7 @@ public static partial class BacklogParser
                 if (cells.Count >= 3 && TaskId().IsMatch(cells[0]))
                 {
                     var done = cells[^1].Contains('✅');
-                    story.Tasks.Add(new TaskItem(cells[0], cells[1], done, i));
+                    story.Tasks.Add(new LegacyTask(cells[1], done));
                 }
                 continue;
             }
@@ -117,39 +132,13 @@ public static partial class BacklogParser
 
             if (tcStatusCol >= 0 && tcStatusCol < cells.Count && cells.Count > tcIdCol)
             {
-                var id = cells[tcIdCol];
                 var desc = tcDescCol < cells.Count ? cells[tcDescCol] : "";
-                story.TestCases.Add(new TestCase(id, desc, ParseStatusCell(cells[tcStatusCol]), i));
+                story.TestCases.Add(new LegacyTestCase(desc, ParseStatusLabel(cells[tcStatusCol])));
             }
         }
 
         FlushEpic();
-        return new Board(AssignSlugs(epics), roadmapVersions, Sha256(markdown));
-    }
-
-    /// <summary>
-    /// Gives every epic and story its URL segment. Epic slugs are unique across the board and avoid
-    /// the app's own paths; story slugs only need to be unique inside their epic, because the story
-    /// URL is always reached through it. Titles fall back to the epic number or story code when
-    /// they contain nothing sluggable.
-    /// </summary>
-    private static List<Epic> AssignSlugs(List<Epic> epics)
-    {
-        var epicSlugs = Slugs.Unique(
-            epics.Select(e => e.Title).ToList(),
-            epics.Select(e => $"epic-{e.Number}").ToList(),
-            topLevel: true);
-
-        return epics.Select((epic, i) =>
-        {
-            var storySlugs = Slugs.Unique(
-                epic.Stories.Select(s => s.Title).ToList(),
-                epic.Stories.Select(s => s.Code).ToList(),
-                topLevel: false);
-
-            var stories = epic.Stories.Select((s, j) => s with { Slug = storySlugs[j] }).ToList();
-            return epic with { Slug = epicSlugs[i], Stories = stories };
-        }).ToList();
+        return new LegacyBoard(epics, roadmapVersions);
     }
 
     /// <summary>Splits a markdown table row into trimmed cells, honoring escaped "\|" pipes.</summary>
@@ -175,36 +164,30 @@ public static partial class BacklogParser
     private static bool IsSeparatorRow(List<string> cells) =>
         cells.All(c => c.Length > 0 && c.All(ch => ch is '-' or ':' or ' '));
 
-    private static StatusToken ParseStatusCell(string cell)
+    /// <summary>"✅ Passed" -> "Passed". The emoji was presentation even in the old format.</summary>
+    private static string ParseStatusLabel(string cell)
     {
         var t = cell.Trim();
         var sp = t.IndexOf(' ');
-        return sp < 0 ? new StatusToken(t, "") : new StatusToken(t[..sp], t[(sp + 1)..].Trim());
-    }
-
-    private static string Sha256(string s)
-    {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(s));
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        return sp < 0 ? t : t[(sp + 1)..].Trim();
     }
 
     private enum Section { None, Tasks, TestCases }
 
     private sealed class EpicBuilder(int number, string title)
     {
-        public List<Story> Stories { get; } = new();
-        public Epic Build() => new(number, title, Stories);
+        public List<LegacyStory> Stories { get; } = new();
+        public LegacyEpic Build() => new(number, title, Stories);
     }
 
     private sealed class StoryBuilder(string code, string title)
     {
-        public StatusToken Status { get; set; } = new("", "");
+        public string StatusLabel { get; set; } = "";
         public string Release { get; set; } = "";
         public string? SkillPath { get; set; }
-        public int StatusLine { get; set; } = -1;
-        public List<TaskItem> Tasks { get; } = new();
-        public List<TestCase> TestCases { get; } = new();
-        public Story Build() => new(code, title, Status, Release, SkillPath, Tasks, TestCases, StatusLine);
+        public List<LegacyTask> Tasks { get; } = new();
+        public List<LegacyTestCase> TestCases { get; } = new();
+        public LegacyStory Build() => new(code, title, StatusLabel, Release, SkillPath, Tasks, TestCases);
     }
 
     [GeneratedRegex(@"^#\s+Epic\s+(\d+):\s*(.+?)\s*$")]
