@@ -32,6 +32,15 @@ dotnet run --project src/MiniTracker.Api
 Open **http://localhost:5249**. It's the same address every time. To stop it, press `Ctrl+C` in the
 terminal.
 
+> **Already using port 5249?** You'll see
+> `Failed to bind to address http://127.0.0.1:5249: address already in use`.
+> Either close whatever is on it — often an earlier copy of Mini Tracker still running in another
+> terminal — or pick a different port:
+>
+> ```bash
+> dotnet run --project src/MiniTracker.Api --urls http://localhost:5300
+> ```
+
 That's the whole setup. Nothing to install, configure or sign up for — the first run shows a demo
 project with 5 epics and 24 stories so you can click around before pointing it at anything of yours.
 The demo is a real, editable copy, and it's gitignored, so nothing you do to it is at stake.
