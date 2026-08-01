@@ -124,4 +124,39 @@ public class YamlIndexTests
         Assert.Equal("reporting", board.Epics[0].Slug);
         Assert.Equal("reporting-2", board.Epics[1].Slug);
     }
+
+    [Fact]
+    public void A_duplicate_key_is_rejected()
+    {
+        // The default is to let the last key win, which would drop a whole epic with no error
+        // anywhere. The integrity checks cannot catch that: by the time they run, it is gone.
+        var yaml = """
+            project: Demo
+            epics:
+              - number: 1
+                title: Kept
+            epics:
+              - number: 2
+                title: Also kept
+            """;
+
+        Assert.Throws<YamlDotNet.Core.YamlException>(() => YamlIndex.Parse(yaml));
+    }
+
+    [Fact]
+    public void A_duplicate_field_on_a_story_is_rejected()
+    {
+        var yaml = """
+            project: Demo
+            epics:
+              - number: 1
+                title: One
+                stories:
+                  - code: US-01
+                    title: First
+                    title: Second
+            """;
+
+        Assert.Throws<YamlDotNet.Core.YamlException>(() => YamlIndex.Parse(yaml));
+    }
 }

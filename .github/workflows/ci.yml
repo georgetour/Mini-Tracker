@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    # Linux on purpose: the app has no shell dependency and no PowerShell anywhere, and running
+    # here is what proves it. It also catches the case-sensitivity bugs a Windows-only run hides.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      # ContinuousIntegrationBuild turns analyzer and naming warnings into errors — see
+      # Directory.Build.props. Without this the rules are advice nobody has to take.
+      - name: Build
+        run: dotnet build --no-restore -p:ContinuousIntegrationBuild=true
+
+      - name: Test
+        run: dotnet test --no-build -p:ContinuousIntegrationBuild=true --verbosity normal

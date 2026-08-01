@@ -144,7 +144,7 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
         }
     }
 
-    public Board AddStory(int epicNumber, string code, string title, string? release)
+    public Board AddStory(int epicNumber, string code, string title, string? release, string? description = null)
     {
         code = Require(code, "Give the story a code, for example US-25.", 20);
         title = Require(title, "Give the story a title.", 120);
@@ -159,11 +159,28 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
             if (board.Epics.SelectMany(e => e.Stories).Any(s => s.Code == code))
                 throw new BacklogValidationException($"{code} is already used. Pick another code.");
 
-            var folder = FreeFolder(board, title, code);
-            StoryFolder.Create(resolveSkills(), folder, code, title);
+            var folder = FindFreeFolderName(board, title, code);
+            StoryFolder.Create(resolveSkills(), folder, code, title, description);
 
             var story = new Story(code, title, "Not Yet Started", release, folder);
             return Save(Replace(board, epic with { Stories = epic.Stories.Append(story).ToList() }));
+        }
+    }
+
+    /// <summary>Renames a story and sets its release. The folder is deliberately left where it is:
+    /// it is recorded explicitly in the index, so a rename cannot orphan it — and moving a directory
+    /// someone may have open is a far worse failure than a folder whose name has drifted from its
+    /// title.</summary>
+    public Board EditStory(string code, string title, string? release)
+    {
+        title = Require(title, "Give the story a title.", 120);
+        release = (release ?? "").Trim();
+
+        lock (_lock)
+        {
+            var board = Read();
+            var (epic, story) = Locate(board, code);
+            return Save(Replace(board, epic, story with { Title = title, Release = release }));
         }
     }
 
@@ -195,7 +212,7 @@ public sealed class BacklogService(Func<string> resolveBacklog, Func<string> res
 
     /// <summary>A folder name nothing else is using. Derived from the title, so it reads like the
     /// story, with a numeric suffix only when two stories would collide.</summary>
-    private static string FreeFolder(Board board, string title, string code)
+    private static string FindFreeFolderName(Board board, string title, string code)
     {
         var used = new HashSet<string>(
             board.Epics.SelectMany(e => e.Stories).Select(s => s.Folder), StringComparer.OrdinalIgnoreCase);

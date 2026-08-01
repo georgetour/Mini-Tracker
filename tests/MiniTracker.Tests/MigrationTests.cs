@@ -62,8 +62,8 @@ public class MigrationTests : IDisposable
         var details = board.Epics.SelectMany(e => e.Stories)
             .Select(s => StoryFolder.Read(Skills, s.Folder)).ToList();
 
-        Assert.True(details.Count(d => d.Tasks.Count > 0) > 0, "no story kept its tasks");
-        Assert.True(details.Count(d => d.TestCases.Count > 0) > 0, "no story kept its test cases");
+        Assert.True(details.Any(d => d.Tasks.Count > 0), "no story kept its tasks");
+        Assert.True(details.Any(d => d.TestCases.Count > 0), "no story kept its test cases");
     }
 
     [Fact]

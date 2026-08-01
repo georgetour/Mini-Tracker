@@ -41,7 +41,7 @@ public class BacklogValidationTests : IDisposable
         var report = BacklogValidation.Check(Backlog, Skills);
 
         Assert.True(report.Ok);
-        Assert.Empty(report.Issues.Where(i => i.Severity == "error"));
+        Assert.DoesNotContain(report.Issues, i => i.Severity == "error");
     }
 
     [Fact]
@@ -92,6 +92,38 @@ public class BacklogValidationTests : IDisposable
 
         Assert.True(report.Ok);
         Assert.Contains(report.Issues, i => i.Severity == "warning" && i.Message.Contains("orphan"));
+    }
+
+    [Fact]
+    public void An_unreferenced_folder_with_files_warns_that_it_is_not_a_story()
+    {
+        // The whole confusion this warning exists to clear up: a folder with a SKILL.md in it looks
+        // like it should have appeared on the board, and nothing anywhere said why it did not.
+        WriteIndex(Good);
+        Directory.CreateDirectory(Path.Combine(Skills, "board"));
+        var kept = Directory.CreateDirectory(Path.Combine(Skills, "template")).FullName;
+        File.WriteAllText(Path.Combine(kept, "SKILL.md"), "# A scaffold I keep on purpose\n");
+
+        var report = BacklogValidation.Check(Backlog, Skills);
+
+        var issue = Assert.Single(report.Issues, i => i.Message.Contains("\"template\""));
+        Assert.Contains("has files in it", issue.Message);
+        Assert.Contains("does not add a story", issue.Message);
+        Assert.Contains("delete the folder", issue.Message);
+    }
+
+    [Fact]
+    public void An_empty_unreferenced_folder_is_reported_as_empty()
+    {
+        WriteIndex(Good);
+        Directory.CreateDirectory(Path.Combine(Skills, "board"));
+        Directory.CreateDirectory(Path.Combine(Skills, "expense"));
+
+        var report = BacklogValidation.Check(Backlog, Skills);
+
+        var issue = Assert.Single(report.Issues, i => i.Message.Contains("\"expense\""));
+        Assert.Contains("is empty", issue.Message);
+        Assert.DoesNotContain("has files in it", issue.Message);
     }
 
     [Fact]
@@ -195,6 +227,30 @@ public class BacklogValidationTests : IDisposable
 
         Assert.False(report.Ok);
         Assert.Contains(report.Issues, i => i.Message.Contains("no folder"));
+    }
+
+    [Fact]
+    public void A_broken_test_cases_file_is_blamed_on_test_cases_not_tasks()
+    {
+        // The message has to name the file that actually failed. Reading both files behind one
+        // call once reported a broken test-cases.yaml as a broken tasks.yaml, sending you to
+        // inspect a file with nothing wrong with it.
+        WriteIndex(Good);
+        var dir = Path.Combine(Skills, "board");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "tasks.yaml"), "- text: Perfectly fine\n  done: false\n");
+
+        // Shell-style quote escaping ('\'') leaking into a YAML file — exactly what an agent
+        // writing this through a bash heredoc produces, and what broke a real backlog.
+        File.WriteAllText(Path.Combine(dir, "test-cases.yaml"),
+            "- text: 'Run date_trunc('\\''year'\\'', paid_at) and check'\n  status: Not Run\n");
+
+        var report = BacklogValidation.Check(Backlog, Skills);
+
+        Assert.False(report.Ok);
+        var issue = report.Issues.First(i => i.Severity == "error");
+        Assert.Contains("test-cases.yaml", issue.Where);
+        Assert.DoesNotContain("tasks.yaml", issue.Where);
     }
 
     [Fact]

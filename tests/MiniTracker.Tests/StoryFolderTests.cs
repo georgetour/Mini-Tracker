@@ -14,6 +14,26 @@ public class StoryFolderTests : IDisposable
     }
 
     [Fact]
+    public void A_task_with_a_duplicate_key_is_rejected()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "bills"));
+        File.WriteAllText(Path.Combine(_root, "bills", "tasks.yaml"),
+            "- text: Build the API\n  text: Build the page\n  done: false\n");
+
+        Assert.Throws<YamlDotNet.Core.YamlException>(() => StoryFolder.ReadTasks(_root, "bills"));
+    }
+
+    [Fact]
+    public void A_test_case_with_a_duplicate_key_is_rejected()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "bills"));
+        File.WriteAllText(Path.Combine(_root, "bills", "test-cases.yaml"),
+            "- text: Check the total\n  status: Passed\n  status: Failed\n");
+
+        Assert.Throws<YamlDotNet.Core.YamlException>(() => StoryFolder.ReadTestCases(_root, "bills"));
+    }
+
+    [Fact]
     public void Read_returns_empty_lists_when_the_folder_has_no_files()
     {
         Directory.CreateDirectory(Path.Combine(_root, "bills"));

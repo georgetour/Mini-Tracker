@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -65,7 +66,10 @@ public static partial class MarkdownBacklogParser
             if (mEpic.Success)
             {
                 FlushEpic();
-                epic = new EpicBuilder(int.Parse(mEpic.Groups[1].Value), mEpic.Groups[2].Value.Trim());
+                // Invariant: the epic number came out of a regex on a file, not from a person
+                // typing in their own locale.
+                epic = new EpicBuilder(int.Parse(mEpic.Groups[1].Value, CultureInfo.InvariantCulture),
+                                       mEpic.Groups[2].Value.Trim());
                 section = Section.None;
                 continue;
             }
@@ -90,11 +94,14 @@ public static partial class MarkdownBacklogParser
                 continue;
             }
 
-            if (line.StartsWith("### "))
+            // Ordinal throughout: these are markdown keywords, not words in the user's language, and
+            // a culture-aware comparison makes them behave differently on a Turkish machine.
+            if (line.StartsWith("### ", StringComparison.Ordinal))
             {
                 var h = line[4..].Trim();
-                section = h.StartsWith("Tasks") ? Section.Tasks
-                    : (h.StartsWith("Test Cases") || h.StartsWith("Validation")) ? Section.TestCases
+                section = h.StartsWith("Tasks", StringComparison.Ordinal) ? Section.Tasks
+                    : (h.StartsWith("Test Cases", StringComparison.Ordinal)
+                    || h.StartsWith("Validation", StringComparison.Ordinal)) ? Section.TestCases
                     : Section.None;
                 tcHeaderSeen = false; tcStatusCol = -1; tcDescCol = -1; tcIdCol = 0;
                 continue;

@@ -23,7 +23,7 @@ public static class SkillFileResolver
         catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
         { return null; }
 
-        // Shared with StoryFolder.Dir so the two cannot drift apart — see PathSafety for why this
+        // Shared with StoryFolder.DirectoryFor so the two cannot drift apart — see PathSafety for why this
         // is not a string prefix comparison.
         return PathSafety.IsInside(rootFull, candidate) ? candidate : null;
     }

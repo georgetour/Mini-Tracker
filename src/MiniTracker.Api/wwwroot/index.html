@@ -176,10 +176,14 @@
           <button class="rowdel" x-on:click="dismissReport" title="Dismiss" aria-label="Dismiss">✕</button>
         </div>
         <template x-for="issue in report.issues" :key="issue.message">
-          <div class="report-line">
-            <span class="report-sev" x-bind:class="issue.sevClass" x-text="issue.severity"></span>
-            <span x-text="issue.message"></span>
-            <span class="report-where" x-show="issue.where" x-text="issue.where"></span>
+          <div class="report-item">
+            <div class="report-line">
+              <span class="report-sev" x-bind:class="issue.sevClass" x-text="issue.severity"></span>
+              <span x-text="issue.message"></span>
+              <span class="report-where" x-show="issue.where" x-text="issue.where"></span>
+            </div>
+            <!-- The offending line with a caret under it, so nobody counts characters. -->
+            <pre class="report-snippet" x-show="issue.detail" x-text="issue.detail"></pre>
           </div>
         </template>
       </div>
@@ -314,6 +318,10 @@
           </button>
           <div class="spacer"></div>
           <div class="rowacts">
+            <button class="actbtn" x-on:click="goEditStory" title="Edit title and release" aria-label="Edit title and release">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h10M4 17h7"></path></svg>
+              <span class="lbl">Edit story</span>
+            </button>
             <button class="actbtn" x-on:click="editDescription" title="Edit description" aria-label="Edit description">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
               <span class="lbl">Edit description</span>
@@ -374,8 +382,11 @@
                       x-text="task.text" x-on:click="startEditTask(i)" title="Click to edit"></span>
                 <input class="inline-input" x-show="editingTask === i" x-ref="editTask" x-model="draftText"
                        aria-label="Task text"
-                       x-on:keydown.enter="commitEditTask" x-on:keydown.escape="cancelEdit"
-                       x-on:blur="commitEditTask">
+                       x-on:keydown.enter="commitEditTask" x-on:keydown.escape="cancelEdit">
+                <span class="editacts" x-show="editingTask === i">
+                  <button class="btn primary sm" x-on:click="commitEditTask">Save</button>
+                  <button class="btn ghost sm" x-on:click="cancelEdit">Cancel</button>
+                </span>
                 <button class="rowdel" x-on:click="removeTask(i)" title="Delete task" aria-label="Delete task">✕</button>
               </div>
             </template>
@@ -384,8 +395,11 @@
               <button class="addlink" x-show="!addingTask" x-on:click="startAddTask">＋ Add task</button>
               <input class="inline-input" x-show="addingTask" x-ref="newTask" x-model="draftText"
                      placeholder="What needs doing?" aria-label="New task"
-                     x-on:keydown.enter="commitAddTask" x-on:keydown.escape="cancelEdit"
-                     x-on:blur="cancelEdit">
+                     x-on:keydown.enter="commitAddTask" x-on:keydown.escape="cancelEdit">
+              <span class="editacts" x-show="addingTask">
+                <button class="btn primary sm" x-on:click="commitAddTask">Add</button>
+                <button class="btn ghost sm" x-on:click="cancelEdit">Cancel</button>
+              </span>
             </div>
           </div>
 
@@ -407,8 +421,11 @@
               <button class="addlink" x-show="!addingTest" x-on:click="startAddTest">＋ Add test case</button>
               <input class="inline-input" x-show="addingTest" x-ref="newTest" x-model="draftText"
                      placeholder="What must be verified?" aria-label="New test case"
-                     x-on:keydown.enter="commitAddTest" x-on:keydown.escape="cancelEdit"
-                     x-on:blur="cancelEdit">
+                     x-on:keydown.enter="commitAddTest" x-on:keydown.escape="cancelEdit">
+              <span class="editacts" x-show="addingTest">
+                <button class="btn primary sm" x-on:click="commitAddTest">Add</button>
+                <button class="btn ghost sm" x-on:click="cancelEdit">Cancel</button>
+              </span>
             </div>
           </div>
         </div>
@@ -505,8 +522,39 @@
 
           <p class="form-err" x-show="err.form" x-text="err.form"></p>
           <div class="actions">
-            <button type="button" class="btn ghost" x-on:click="goBoard">Cancel</button>
+            <button type="button" class="btn ghost" x-on:click="cancelEditEpic">Cancel</button>
             <button type="submit" class="btn primary" x-bind:disabled="saving">Save title</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="page" x-show="page === 'edit-story'">
+        <nav class="crumb"><button class="crumb-link" x-on:click="goBoard">Overview</button>
+          <span class="crumb-sep">›</span><span class="crumb-cur">Edit story</span></nav>
+        <h1 class="page-title">Edit story</h1>
+        <p class="page-sub">Changes the title and release in your <span class="mono">BACKLOG.yaml</span>.
+          Its tasks, test cases and description are untouched.</p>
+
+        <form x-on:submit.prevent="submitEditStory" novalidate>
+          <div class="field">
+            <label for="editStoryTitle">Title</label>
+            <input type="text" id="editStoryTitle" name="title" required maxlength="120" autocomplete="off"
+                   x-model="form.title">
+            <p class="field-err" x-show="err.title" x-text="err.title"></p>
+          </div>
+
+          <div class="field">
+            <label for="editStoryRelease">Release <span class="opt">optional</span></label>
+            <input type="text" id="editStoryRelease" name="release" maxlength="20" autocomplete="off"
+                   x-model="form.release" placeholder="V1">
+          </div>
+
+          <p class="assigned">Editing <strong x-text="storyCode"></strong>. Its code and its folder stay the same.</p>
+
+          <p class="form-err" x-show="err.form" x-text="err.form"></p>
+          <div class="actions">
+            <button type="button" class="btn ghost" x-on:click="cancelEditStory">Cancel</button>
+            <button type="submit" class="btn primary" x-bind:disabled="saving">Save changes</button>
           </div>
         </form>
       </section>
@@ -542,10 +590,12 @@
           </div>
 
           <div class="field">
-            <label for="storySkill">Skill file <span class="opt">optional</span></label>
-            <input type="text" id="storySkill" name="skillPath" maxlength="200" autocomplete="off"
-                   x-model="form.skillPath" placeholder="skills/reporting/SKILL.md">
-            <p class="hint">Links this story to a written spec. Leave it empty and you can write one from the story page.</p>
+            <label for="storyDescription">Description <span class="opt">optional</span></label>
+            <textarea id="storyDescription" name="description" class="editor short" rows="8"
+                      x-model="form.description" spellcheck="true"
+                      placeholder="As a user, I want … so that …"></textarea>
+            <p class="hint">Markdown. Saved as the story's <span class="mono">SKILL.md</span>, alongside a
+               scaffold for tasks and acceptance criteria. You can leave it empty and write it later.</p>
           </div>
 
           <p class="assigned">This will be <strong x-text="nextStoryCode"></strong>, the next free code.</p>

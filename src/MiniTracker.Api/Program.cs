@@ -55,7 +55,7 @@ var app = builder.Build();
 // 'unsafe-inline' remains for styles only: x-show and x-bind:style write the style attribute, and
 // there is no script-execution risk in a style. Fonts come from Google, so those two hosts are
 // named explicitly rather than opening style-src and font-src to everything.
-const string ContentSecurityPolicy =
+const string contentSecurityPolicy =
     "default-src 'self'; " +
     "script-src 'self'; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
@@ -70,7 +70,7 @@ const string ContentSecurityPolicy =
 app.Use(async (ctx, next) =>
 {
     var headers = ctx.Response.Headers;
-    headers["Content-Security-Policy"] = ContentSecurityPolicy;
+    headers["Content-Security-Policy"] = contentSecurityPolicy;
     headers["X-Content-Type-Options"] = "nosniff";
     headers["Referrer-Policy"] = "no-referrer";
 
@@ -189,9 +189,10 @@ app.MapPost("/api/config/logo", async (HttpRequest req, TrackerConfigService cfg
     if (file is null || file.Length == 0) return Results.BadRequest("No file uploaded");
     if (file.Length > 2 * 1024 * 1024) return Results.BadRequest("Logo must be under 2 MB");
 
+    // A pattern rather than an array: this ran on every upload and allocated the list each time.
     var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-    var allowedExts = new[] { ".png", ".jpg", ".jpeg", ".svg", ".webp" };
-    if (!allowedExts.Contains(ext)) return Results.BadRequest("Logo must be PNG, JPG, SVG, or WebP");
+    if (ext is not (".png" or ".jpg" or ".jpeg" or ".svg" or ".webp"))
+        return Results.BadRequest("Logo must be PNG, JPG, SVG, or WebP");
 
     var uploadsDir = Path.Combine(env.WebRootPath, "uploads");
     Directory.CreateDirectory(uploadsDir);
@@ -245,7 +246,7 @@ app.MapPost("/api/epic", (AddEpicRequest r, BacklogService svc) =>
 
 app.MapPost("/api/story", (AddStoryRequest r, BacklogService svc) =>
 {
-    try { return Results.Json(svc.AddStory(r.EpicNumber, r.Code, r.Title, r.Release)); }
+    try { return Results.Json(svc.AddStory(r.EpicNumber, r.Code, r.Title, r.Release, r.Description)); }
     catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
 });
 
@@ -258,6 +259,12 @@ app.MapPost("/api/epic/{number:int}", (int number, RenameRequest r, BacklogServi
 app.MapDelete("/api/epic/{number:int}", (int number, BacklogService svc) =>
 {
     try { return Results.Json(svc.DeleteEpic(number)); }
+    catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
+});
+
+app.MapPost("/api/story/{code}", (string code, EditStoryRequest r, BacklogService svc) =>
+{
+    try { return Results.Json(svc.EditStory(code, r.Title, r.Release)); }
     catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
 });
 
@@ -295,6 +302,7 @@ app.MapGet("/configure", () => Shell());
 app.MapGet("/add-epic", () => Shell());
 app.MapGet("/add-story", () => Shell());
 app.MapGet("/edit-epic", () => Shell());
+app.MapGet("/edit-story", () => Shell());
 
 app.MapGet("/releases/{tag}", (string tag, BacklogService svc) =>
 {
@@ -320,11 +328,14 @@ app.MapGet("/{epicSlug}/{storySlug}", (string epicSlug, string storySlug, Backlo
 
 app.Run();
 
-record StatusRequest(string Status);
-record TaskListRequest(List<TaskItem> Tasks);
-record TestCaseListRequest(List<TestCase> TestCases);
-record PathRequest(string Path);
-record AddEpicRequest(int Number, string Title);
-record AddStoryRequest(int EpicNumber, string Code, string Title, string? Release);
-record SaveSkillRequest(string Path, string Content);
-record RenameRequest(string Title);
+// The request bodies each endpoint binds. Sealed because nothing derives from them and the JIT
+// devirtualizes their members once it knows there is no subtype.
+sealed record StatusRequest(string Status);
+sealed record TaskListRequest(List<TaskItem> Tasks);
+sealed record TestCaseListRequest(List<TestCase> TestCases);
+sealed record PathRequest(string Path);
+sealed record AddEpicRequest(int Number, string Title);
+sealed record AddStoryRequest(int EpicNumber, string Code, string Title, string? Release, string? Description);
+sealed record SaveSkillRequest(string Path, string Content);
+sealed record RenameRequest(string Title);
+sealed record EditStoryRequest(string Title, string? Release);

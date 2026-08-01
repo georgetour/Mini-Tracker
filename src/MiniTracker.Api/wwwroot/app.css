@@ -104,7 +104,10 @@ main{flex:1;min-width:0;padding:22px 24px 60px}
 
 /* Global "+ Add" menu — one add menu in the top bar, never one button per thing you can create. */
 .addwrap{position:relative;flex:none}
-.addpill{display:flex;align-items:center;gap:6px;background:#fff;color:var(--brand-ink);border:none;
+/* The background is a fixed white, so the text colour must be fixed too. Using --brand-ink here
+   made the label light blue on white in dark mode — 1.7:1, well under the 4.5:1 minimum. A themed
+   foreground only works on a themed background. */
+.addpill{display:flex;align-items:center;gap:6px;background:#fff;color:#164A99;border:none;
   border-radius:999px;padding:0 14px;height:34px;font-family:inherit;font-size:12.5px;
   font-weight:600;cursor:pointer;white-space:nowrap}
 .addpill:hover{background:rgba(255,255,255,.9)}
@@ -333,6 +336,8 @@ button.rel-head{border-top:none;border-right:none;cursor:pointer}
   line-height:1.6;color:var(--text);background:var(--bg);border:1px solid var(--border);
   border-radius:9px;padding:14px 16px}
 .editor:focus-visible{outline:2px solid var(--brand);outline-offset:1px;border-color:var(--brand)}
+/* On a form the editor shares space with other fields, so it starts smaller and grows by hand. */
+.editor.short{min-height:150px;font-size:13.5px;background:var(--surface)}
 .md-empty{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:6px 0 2px}
 .md-empty p{margin:0;color:var(--faint);font-size:13.5px;max-width:52ch}
 
@@ -356,6 +361,14 @@ button.rel-head{border-top:none;border-right:none;cursor:pointer}
   background:var(--surface);border:1px solid var(--brand);border-radius:6px;padding:4px 8px}
 .inline-input:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
 .addrow{border-bottom:none;padding-top:8px}
+/* Explicit Save/Cancel next to the field. Enter and Escape still work, but a keyboard shortcut is
+   not an affordance — and on a phone there is no visible Enter to discover. */
+.editacts{display:flex;gap:6px;flex:none}
+@media (max-width:560px){
+  .lrow.addrow,.lrow:has(.editacts){flex-wrap:wrap}
+  .editacts{width:100%;margin-top:6px}
+  .editacts .btn{flex:1}
+}
 .addlink{background:none;border:none;padding:2px 0;font-family:inherit;font-size:13px;
   font-weight:600;color:var(--brand);cursor:pointer}
 .addlink:hover{color:var(--brand-ink)}
@@ -379,7 +392,13 @@ button.rel-head{border-top:none;border-right:none;cursor:pointer}
 .report.bad{border-color:var(--err);background:var(--fail-bg)}
 .report.warn{border-color:var(--st-rev-fg);background:var(--st-rev-bg)}
 .report-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-.report-line{display:flex;gap:8px;align-items:baseline;padding:3px 0;flex-wrap:wrap}
+.report-item{padding:3px 0}
+.report-line{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+/* The offending line with a caret under it. Scrolls rather than wrapping — wrapping would move the
+   caret away from the character it points at, which is the whole value of showing it. */
+.report-snippet{margin:6px 0 8px;padding:8px 10px;border-radius:6px;overflow-x:auto;
+  font-family:'IBM Plex Mono',monospace;font-size:11.5px;line-height:1.5;white-space:pre;
+  background:var(--surface);border:1px solid var(--border);color:var(--text)}
 .report-sev{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;flex:none}
 .sev-bad{color:var(--err)}
 .sev-warn{color:var(--st-rev-fg)}

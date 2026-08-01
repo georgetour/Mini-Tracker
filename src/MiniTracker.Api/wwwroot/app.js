@@ -36,8 +36,10 @@ const ACTIVITY = { "In Progress":5, "Vendor Test":4, "Under Review":3, "Refined"
 /** Form pages, by URL. Everything else is a board view, which has its own URL shape — see
  *  routePath() and readUrl(). Every screen is addressable, so the breadcrumb, the address bar and
  *  the browser's back button always agree with each other. */
-const PAGES = { "/configure":"configure", "/add-epic":"add-epic", "/add-story":"add-story", "/edit-epic":"edit-epic" };
-const PATH_FOR = { configure:"/configure", "add-epic":"/add-epic", "add-story":"/add-story", "edit-epic":"/edit-epic" };
+const PAGES = { "/configure":"configure", "/add-epic":"add-epic", "/add-story":"add-story",
+                "/edit-epic":"edit-epic", "/edit-story":"edit-story" };
+const PATH_FOR = { configure:"/configure", "add-epic":"/add-epic", "add-story":"/add-story",
+                   "edit-epic":"/edit-epic", "edit-story":"/edit-story" };
 
 const pct = (a, b) => (b === 0 ? 0 : Math.round((a / b) * 100));
 const width = n => "width:" + n + "%";
@@ -295,9 +297,12 @@ document.addEventListener("alpine:init", () => {
         this.report = {
           show: issues.length > 0,
           cls: report.ok ? "warn" : "bad",
+          // The board is still on screen behind this — these are integrity problems, not a failure
+          // to load. Saying "stopping the backlog loading" while it is plainly loaded reads as a
+          // lie and makes people distrust the rest of the message.
           title: report.ok
             ? plural(warnings, "thing worth a look", "things worth a look")
-            : plural(errors, "problem stopping the backlog loading", "problems stopping the backlog loading"),
+            : plural(errors, "problem to fix", "problems to fix"),
           issues: issues.map(i => Object.assign({}, i, {
             sevClass: i.severity === "error" ? "sev-bad" : "sev-warn",
           })),
@@ -351,7 +356,10 @@ document.addEventListener("alpine:init", () => {
 
       const page = PAGES[path];
       if(page){
+        // Both edit pages need something already selected. Reached cold — a bookmark, a refresh —
+        // there is nothing to edit, so fall back rather than showing an empty form.
         if(page === "edit-epic" && this.editingEpic === null) return this.resetToBoard();
+        if(page === "edit-story" && !this.storyCode) return this.resetToBoard();
         return this.openPage(page, false);
       }
       this.page = "";
@@ -388,9 +396,13 @@ document.addEventListener("alpine:init", () => {
       return this.resetToBoard();
     },
 
+    /** A URL naming something that is not there — a stale bookmark, a typo, a story since deleted.
+     *  Landing silently on the Overview looks like the link worked, so say what happened. */
     resetToBoard(){
+      const asked = location.pathname;
       history.replaceState({}, "", "/");
       this.show("board", false);
+      if(asked && asked !== "/") this.toast("That page no longer exists — showing the Overview");
     },
 
     openPage(page, push){
@@ -400,8 +412,11 @@ document.addEventListener("alpine:init", () => {
       this.drawerOpen = false;
       if(page === "configure") this.form = { backlogPath: this.config.backlogPath || "", skillsPath: this.config.skillsPath || "" };
       if(page === "add-epic")  this.form = { title:"" };
-      if(page === "add-story") this.form = { epicNumber: String(this.board.epics.length ? this.board.epics[0].number : 0), title:"", release:"", skillPath:"" };
+      if(page === "add-story") this.form = { epicNumber: String(this.board.epics.length ? this.board.epics[0].number : 0),
+                                             title:"", release:"", description:"" };
       if(page === "edit-epic") this.form = { title: this.epicOf(this.editingEpic) ? this.epicOf(this.editingEpic).title : "" };
+      if(page === "edit-story") this.form = { title: this.story ? this.story.title : "",
+                                              release: this.story ? this.story.release : "" };
       if(push !== false) this.navigate();
     },
 
@@ -426,6 +441,12 @@ document.addEventListener("alpine:init", () => {
     goAddEpic(){ this.openPage("add-epic"); },
     goAddStory(){ this.openPage("add-story"); },
     goRenameEpic(){ this.editingEpic = this.epicNumber; this.openPage("edit-epic"); },
+    goEditStory(){ if(this.story) this.openPage("edit-story"); },
+
+    /** Cancel returns you to what you were editing, not to the Overview. Dumping someone at the
+     *  top of the app because they changed their mind loses their place for no reason. */
+    cancelEditEpic(){ this.openEpicByNumber(this.editingEpic); },
+    cancelEditStory(){ this.show("story"); },
 
     openEpic(epic){ this.openEpicByNumber(epic.number); },
     openEpicByNumber(number, push){ this.epicNumber = number; this.show("epic", push); },
@@ -856,7 +877,9 @@ document.addEventListener("alpine:init", () => {
       if(!e) return;
       const n = e.stories.length;
       const ok = await this.ask("Delete Epic " + e.number + "?",
-        n ? '"' + e.title + '" and its ' + plural(n, "story is", "stories are") + " removed from BACKLOG.yaml, along with their folders. This cannot be undone from here."
+        n ? '"' + e.title + '" and its ' + plural(n, "story is", "stories are")
+            + " removed from BACKLOG.yaml, along with " + (n === 1 ? "its folder" : "their folders")
+            + ". This cannot be undone from here."
           : '"' + e.title + '" is removed from BACKLOG.yaml. It has no stories.',
         n ? "Delete epic and " + plural(n, "story", "stories") : "Delete epic");
       if(!ok) return;
@@ -915,6 +938,26 @@ document.addEventListener("alpine:init", () => {
       finally{ this.saving = false; }
     },
 
+    async submitEditStory(){
+      this.err = {};
+      const title = this.require("title", "Give the story a title.");
+      if(!title) return;
+
+      const code = this.storyCode;
+      this.saving = true;
+      try{
+        this.board = decorate(await api("/api/story/" + encodeURIComponent(code), "POST", {
+          title, release: (this.form.release || "").trim(),
+        }));
+        // The slug follows the title, so the URL this story lives at has just changed. Re-open it
+        // by code and let routePath() write the new address.
+        this.storyCode = code;
+        this.show("story");
+        this.toast("Story updated");
+      }catch(e){ this.err.form = e.message || "The story could not be updated."; }
+      finally{ this.saving = false; }
+    },
+
     async submitStory(){
       this.err = {};
       const title = this.require("title", "Give the story a title.");
@@ -927,9 +970,16 @@ document.addEventListener("alpine:init", () => {
           code: this.nextStoryCode,
           title,
           release: (this.form.release || "").trim(),
-          skillPath: (this.form.skillPath || "").trim(),
+          description: (this.form.description || "").trim(),
         }));
-        this.goBoard();
+        // Open the story that was just created rather than dropping back to the Overview — you
+        // almost always want to keep working on the thing you just made.
+        this.storyCode = this.board.epics
+          .flatMap(e => e.stories).map(s => s.code)
+          .sort((a, b) => Number(b.replace(/\D/g, "")) - Number(a.replace(/\D/g, "")))[0];
+        this.show("story");
+        this.loadDetail();
+        this.loadSkill();
         this.toast("User story added");
       }catch(e){ this.err.form = e.message || "The story could not be added."; }
       finally{ this.saving = false; }

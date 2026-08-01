@@ -157,6 +157,107 @@ public class EndpointContractTests : IDisposable
         Assert.Throws<BacklogValidationException>(() => _svc.AddStory(99, "US-02", "Nope", "V1"));
     }
 
+    // ---------- editing a story ----------
+
+    [Fact]
+    public void EditStory_changes_the_title_and_release()
+    {
+        _svc.EditStory("US-01", "Renamed Board", "V2");
+
+        var story = _svc.GetBoard().Epics[0].Stories.Single();
+        Assert.Equal("Renamed Board", story.Title);
+        Assert.Equal("V2", story.Release);
+    }
+
+    [Fact]
+    public void EditStory_leaves_the_folder_alone_so_nothing_is_orphaned()
+    {
+        // The folder is recorded in the index, so it does not have to match the title. Moving a
+        // directory someone may have open is a worse failure than a name that has drifted.
+        _svc.SetTasks("US-01", new[] { new TaskItem("Keep me", true) });
+
+        _svc.EditStory("US-01", "A Completely Different Title", "V1");
+
+        var story = _svc.GetBoard().Epics[0].Stories.Single();
+        Assert.Equal("board", story.Folder);
+        Assert.Single(_svc.GetStory("US-01").Tasks);
+        Assert.True(_svc.Validate().Ok);
+    }
+
+    [Fact]
+    public void EditStory_changes_the_url_because_the_slug_follows_the_title()
+    {
+        _svc.EditStory("US-01", "Checkout and Payment", "V1");
+
+        Assert.Equal("checkout-and-payment", _svc.GetBoard().Epics[0].Stories.Single().Slug);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void EditStory_rejects_an_empty_title(string title)
+    {
+        Assert.Throws<BacklogValidationException>(() => _svc.EditStory("US-01", title, "V1"));
+    }
+
+    [Fact]
+    public void EditStory_rejects_an_over_long_title()
+    {
+        Assert.Throws<BacklogValidationException>(
+            () => _svc.EditStory("US-01", new string('x', 121), "V1"));
+    }
+
+    [Fact]
+    public void EditStory_rejects_an_unknown_story()
+    {
+        Assert.Throws<BacklogValidationException>(() => _svc.EditStory("US-99", "Nope", "V1"));
+    }
+
+    // ---------- description written at creation ----------
+
+    [Fact]
+    public void AddStory_writes_the_description_into_the_new_SKILL_md()
+    {
+        _svc.AddStory(0, "US-02", "Export to CSV", "V1",
+            "As an analyst, I want to export the report, so that I can work on it offline.");
+
+        var skill = File.ReadAllText(Path.Combine(Skills, "export-to-csv", "SKILL.md"));
+        Assert.Contains("As an analyst, I want to export the report", skill);
+        Assert.Contains("# US-02 · Export to CSV", skill);
+    }
+
+    [Fact]
+    public void AddStory_keeps_the_rest_of_the_scaffold_around_the_description()
+    {
+        _svc.AddStory(0, "US-02", "Export to CSV", "V1", "Some prose.");
+
+        var skill = File.ReadAllText(Path.Combine(Skills, "export-to-csv", "SKILL.md"));
+        Assert.Contains("## Description", skill);
+        Assert.Contains("## Tasks", skill);
+        Assert.Contains("## Acceptance Criteria", skill);
+        // The placeholder it replaced must be gone, or the file reads as unfinished.
+        Assert.DoesNotContain("[Plain, precise description", skill);
+    }
+
+    [Fact]
+    public void AddStory_without_a_description_still_gets_the_template()
+    {
+        _svc.AddStory(0, "US-02", "Export to CSV", "V1", null);
+
+        var skill = File.ReadAllText(Path.Combine(Skills, "export-to-csv", "SKILL.md"));
+        Assert.Contains("## Description", skill);
+        Assert.Contains("## Acceptance Criteria", skill);
+    }
+
+    [Fact]
+    public void A_description_containing_markup_is_stored_as_written()
+    {
+        _svc.AddStory(0, "US-02", "Export to CSV", "V1", "<script>alert(1)</script> and **bold**");
+
+        var skill = File.ReadAllText(Path.Combine(Skills, "export-to-csv", "SKILL.md"));
+        Assert.Contains("<script>alert(1)</script>", skill);   // it is a text file; escaping happens on render
+    }
+
     // ---------- deleting is not gated by the dialog ----------
 
     [Fact]

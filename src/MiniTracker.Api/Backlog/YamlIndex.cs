@@ -38,9 +38,13 @@ public static class YamlIndex
         public string Folder { get; set; } = "";
     }
 
+    // Duplicate keys are rejected rather than silently letting the last one win. In a file that IS
+    // the database, "epics:" appearing twice would drop a whole epic with no error anywhere — and
+    // the integrity checks below could not catch it, because by then the data is already gone.
     private static readonly IDeserializer Reader = new DeserializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
         .IgnoreUnmatchedProperties()
+        .WithDuplicateKeyChecking()
         .Build();
 
     private static readonly ISerializer Writer = new SerializerBuilder()

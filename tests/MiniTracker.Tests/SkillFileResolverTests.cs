@@ -55,7 +55,7 @@ public class SkillFileResolverTests
     [Fact]
     public void A_bare_dot_means_the_roots_own_SKILL_md()
     {
-        // Unlike StoryFolder.Dir, this always resolves to a *file* — "." becomes root/SKILL.md,
+        // Unlike StoryFolder.DirectoryFor, this always resolves to a *file* — "." becomes root/SKILL.md,
         // which is legitimately inside the root. There is no directory here to delete by mistake.
         var root = Path.Combine(Path.GetTempPath(), "proj");
 
