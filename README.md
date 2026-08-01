@@ -9,7 +9,7 @@ away — no save button, no database, no account.
 
 Responsive down to 320px — the same board on a phone, with the destinations moved to a bottom bar:
 
-<img src="docs/screenshots/mobile.png" alt="On a narrow screen" width="380">
+<img src="docs/screenshots/mobile.png" alt="On a narrow screen" width="300">
 
 ## Setup
 
@@ -170,6 +170,7 @@ you an empty board.
 - **No setup.** One command. No Node, no npm, no build step.
 - **Readable diffs.** A click changes one value and leaves the rest of the file alone.
 - **Still just files.** Edit them by hand, review them in a pull request, grep them.
+- - **AI Friendly** AI can easily understand the structure and files needed.
 
 > Mini Tracker runs on localhost and has no login. Don't expose it on a public network.
 
