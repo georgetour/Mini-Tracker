@@ -51,9 +51,10 @@ public static class StoryFolder
             throw new BacklogValidationException("That story has no folder.");
 
         var rootFull = Path.GetFullPath(skillsRoot);
+        var name = PathSafety.NormaliseSeparators(folder);
 
         string candidate;
-        try { candidate = Path.GetFullPath(Path.Combine(rootFull, folder)); }
+        try { candidate = Path.GetFullPath(Path.Combine(rootFull, name)); }
         catch (Exception) { throw new BacklogValidationException($"\"{folder}\" is not a usable folder name."); }
 
         if (!PathSafety.IsInside(rootFull, candidate))

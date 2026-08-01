@@ -148,8 +148,14 @@ public class StoryFolderTests : IDisposable
     [InlineData("../outside")]
     [InlineData("..\\outside")]
     [InlineData("bills/../../outside")]
+    [InlineData("..\\..\\outside")]
+    [InlineData("bills\\..\\..\\outside")]
     public void A_folder_cannot_escape_the_skills_root(string folder)
     {
+        // The backslash cases are the ones that only a Linux run catches: there "\" is an ordinary
+        // filename character, so without normalising these resolve to a folder oddly named
+        // "..\outside" rather than escaping — and the same value is a real traversal on Windows.
+        // BACKLOG.yaml travels in git, so it has to mean the same thing on both.
         Assert.Throws<BacklogValidationException>(() => StoryFolder.Read(_root, folder));
     }
 

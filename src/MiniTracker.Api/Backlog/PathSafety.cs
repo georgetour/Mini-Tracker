@@ -20,6 +20,17 @@ public static class PathSafety
     /// own rules, so this is correct on both — and it also catches a candidate on a different
     /// drive, which a prefix test gets right only by accident.
     /// </summary>
+    /// <summary>
+    /// Rewrites backslashes to forward slashes so a fragment means the same thing on every OS.
+    ///
+    /// Windows treats both as separators; Linux treats "\" as an ordinary filename character. So
+    /// "..\outside" escapes the root on Windows and is a folder literally called "..\outside" on
+    /// Linux. That asymmetry matters because BACKLOG.yaml travels in git: a folder value written
+    /// on Linux, where it is harmless, becomes a directory traversal the moment the file is opened
+    /// on Windows. Normalising first means the traversal is caught on both.
+    /// </summary>
+    public static string NormaliseSeparators(string fragment) => fragment.Replace('\\', '/');
+
     public static bool IsInside(string root, string candidate)
     {
         var relative = Path.GetRelativePath(root, candidate);

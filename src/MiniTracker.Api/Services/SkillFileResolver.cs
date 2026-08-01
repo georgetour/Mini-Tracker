@@ -12,7 +12,7 @@ public static class SkillFileResolver
     {
         if (string.IsNullOrWhiteSpace(relativePath)) return null;
 
-        var trimmed = relativePath.Trim();
+        var trimmed = PathSafety.NormaliseSeparators(relativePath.Trim());
         if (!trimmed.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
             trimmed = Path.Combine(trimmed, "SKILL.md");
 
