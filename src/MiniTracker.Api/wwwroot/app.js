@@ -136,7 +136,7 @@ function renderMarkdown(src){
 
   // "- [ ] AC1: …" and "- [x] …". Rendered as a real checkbox rather than the literal characters,
   // and deliberately not clickable: these belong to the description file, whereas the tick-boxes
-  // elsewhere on the page are the story's tasks in BACKLOG.md. Two different things.
+  // elsewhere on the page are the story's tasks in tasks.yaml. Two different things.
   const TASK_ITEM = /^\[([ xX])\]\s+([\s\S]*)$/;
 
   let list = [], ordered = false, para = [];
@@ -841,7 +841,7 @@ document.addEventListener("alpine:init", () => {
       const s = this.story;
       if(!s) return;
       const ok = await this.ask("Delete " + s.code + "?",
-        '"' + s.title + '" and its tasks and test cases are removed from BACKLOG.md. Its description file is left on disk.',
+        '"' + s.title + '" and its tasks and test cases are removed from BACKLOG.yaml. Its folder is deleted too.',
         "Delete story");
       if(!ok) return;
       try{
@@ -856,8 +856,8 @@ document.addEventListener("alpine:init", () => {
       if(!e) return;
       const n = e.stories.length;
       const ok = await this.ask("Delete Epic " + e.number + "?",
-        n ? '"' + e.title + '" and its ' + plural(n, "story is", "stories are") + " removed from BACKLOG.md. This cannot be undone from here."
-          : '"' + e.title + '" is removed from BACKLOG.md. It has no stories.',
+        n ? '"' + e.title + '" and its ' + plural(n, "story is", "stories are") + " removed from BACKLOG.yaml, along with their folders. This cannot be undone from here."
+          : '"' + e.title + '" is removed from BACKLOG.yaml. It has no stories.',
         n ? "Delete epic and " + plural(n, "story", "stories") : "Delete epic");
       if(!ok) return;
       try{
@@ -938,8 +938,11 @@ document.addEventListener("alpine:init", () => {
     async saveConfig(){
       this.err = {};
       const backlog = (this.form.backlogPath || "").trim();
-      if(backlog && !/\.md$/i.test(backlog)){
-        this.err.backlogPath = "Point this at a .md file, for example C:/projects/my-app/BACKLOG.md.";
+      // Must match TrackerConfigService.ValidateBacklogPath. This check only saves a round trip —
+      // the server enforces the same rule — but when the two disagree the form blocks a path the
+      // server would have accepted, which is worse than having no check at all.
+      if(backlog && !/\.ya?ml$/i.test(backlog)){
+        this.err.backlogPath = "Point this at a .yaml file, for example C:/projects/my-app/BACKLOG.yaml.";
         return;
       }
       const skills = (this.form.skillsPath || "").trim();

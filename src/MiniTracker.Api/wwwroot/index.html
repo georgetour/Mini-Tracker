@@ -65,14 +65,14 @@
       </div>
 
       <button id="btnConfigure" class="hbtn h-stage icon-only" x-on:click="goConfigure"
-              aria-label="Configure" title="Configure — choose which BACKLOG.md and skills folder to use"><span class="ic">⚙</span></button>
+              aria-label="Configure" title="Configure — choose which BACKLOG.yaml and skills folder to use"><span class="ic">⚙</span></button>
       <button id="btnSync" class="hbtn h-sync" x-on:click="reload"
-              title="Reload BACKLOG.md from disk and refresh the roll-up summary">
+              title="Reload every file from disk and check them for problems">
         <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></span>
         <span class="lbl">Reload from file</span>
       </button>
       <button id="btnStage" class="hbtn h-stage" x-on:click="stage"
-              title="Run git add on BACKLOG.md so your changes are staged — never commits">
+              title="Run git add on BACKLOG.yaml so your changes are staged — never commits">
         <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="8" r="2.2"></circle><path d="M6 8.2v7.6"></path><path d="M18 10.2a6 6 0 0 1-6 6H8.5"></path></svg></span>
         <span class="lbl">Stage in git</span>
       </button>
@@ -428,7 +428,7 @@
           <div class="field">
             <label for="cfgBacklog">Backlog file</label>
             <input type="text" id="cfgBacklog" name="backlogPath" autocomplete="off"
-                   x-model="form.backlogPath" placeholder="C:/projects/my-app/BACKLOG.md">
+                   x-model="form.backlogPath" placeholder="C:/projects/my-app/BACKLOG.yaml">
             <p class="hint">If the file doesn't exist yet, Mini Tracker creates it from the bundled template.</p>
             <p class="field-err" x-show="err.backlogPath" x-text="err.backlogPath"></p>
           </div>
@@ -437,7 +437,7 @@
             <label for="cfgSkills">Skills folder <span class="opt">optional</span></label>
             <input type="text" id="cfgSkills" name="skillsPath" autocomplete="off"
                    x-model="form.skillsPath" placeholder="C:/projects/my-app">
-            <p class="hint">The folder your <span class="mono">skills/…</span> paths start from.</p>
+            <p class="hint">The folder that holds your story folders — usually <span class="mono">skills</span>.</p>
             <p class="field-err" x-show="err.skillsPath" x-text="err.skillsPath"></p>
           </div>
 
@@ -467,7 +467,7 @@
         <nav class="crumb"><button class="crumb-link" x-on:click="goBoard">Overview</button>
           <span class="crumb-sep">›</span><span class="crumb-cur">Add epic</span></nav>
         <h1 class="page-title">Add an epic</h1>
-        <p class="page-sub">Adds a new epic section to your <span class="mono">BACKLOG.md</span>.</p>
+        <p class="page-sub">Adds a new epic to your <span class="mono">BACKLOG.yaml</span>.</p>
 
         <form x-on:submit.prevent="submitEpic" novalidate>
           <div class="field">
@@ -491,7 +491,7 @@
         <nav class="crumb"><button class="crumb-link" x-on:click="goBoard">Overview</button>
           <span class="crumb-sep">›</span><span class="crumb-cur">Rename epic</span></nav>
         <h1 class="page-title">Rename epic</h1>
-        <p class="page-sub">Changes the epic's title in your <span class="mono">BACKLOG.md</span>. Its stories are untouched.</p>
+        <p class="page-sub">Changes the epic's title in your <span class="mono">BACKLOG.yaml</span>. Its stories are untouched.</p>
 
         <form x-on:submit.prevent="submitRename" novalidate>
           <div class="field">
@@ -515,7 +515,7 @@
         <nav class="crumb"><button class="crumb-link" x-on:click="goBoard">Overview</button>
           <span class="crumb-sep">›</span><span class="crumb-cur">Add user story</span></nav>
         <h1 class="page-title">Add a user story</h1>
-        <p class="page-sub">Adds a new story to an existing epic in your <span class="mono">BACKLOG.md</span>.</p>
+        <p class="page-sub">Adds a new story to an existing epic in your <span class="mono">BACKLOG.yaml</span>.</p>
 
         <form x-on:submit.prevent="submitStory" novalidate>
           <div class="field">
