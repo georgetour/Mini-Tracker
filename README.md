@@ -57,7 +57,7 @@ BACKLOG.yaml                     the index — every epic and story, and its sta
 skills/
   README.md                      explains the layout to anyone (or anything) reading the folder
   checkout-and-payment/          one folder per story, named after the story
-    SKILL.md                     what the story IS — description, acceptance criteria
+    SKILL.md                     what the story IS — description, tasks, acceptance criteria
     tasks.yaml                   what has to be BUILT, and whether it's done
     test-cases.yaml              what has to be VERIFIED, and whether it passed
 ```
@@ -155,7 +155,29 @@ epics:
   status: Not Run
 ```
 
-**`skills/your-story-title/SKILL.md`** is ordinary markdown — whatever you want the story to say.
+**`skills/your-story-title/SKILL.md`** is markdown, and a story is three sections — nothing else:
+
+```markdown
+# Your Story Title
+
+## Description
+
+What happens and why, in plain words. "As a [actor], I want to [action], so that [benefit]" when
+there's a real person driving it.
+
+## Tasks
+
+1. **Something to build** — what it delivers. *(→ AC1)*
+
+## Acceptance Criteria
+
+- [ ] AC1: An observable, checkable outcome.
+```
+
+That's the whole shape. Tasks here are the refinement narrative — one deliverable per line, each
+naming the criterion it satisfies; the tickable list the board counts is `tasks.yaml` beside it.
+Test cases don't belong in this file at all: they're `test-cases.yaml`, because they carry a result.
+Technical detail — flows, data model, gotchas — belongs in your own design docs, not here.
 
 **Statuses:** Not Yet Started · Under Review · Refined · In Progress · Vendor Test · Done · On Hold
 
@@ -173,7 +195,7 @@ you an empty board.
 - **No setup.** One command. No Node, no npm, no build step.
 - **Readable diffs.** A click changes one value and leaves the rest of the file alone.
 - **Still just files.** Edit them by hand, review them in a pull request, grep them.
-- - **AI Friendly** AI can easily understand the structure and files needed.
+- **AI Friendly** AI can easily understand the structure and files needed.
 
 > Mini Tracker runs on localhost and has no login. Don't expose it on a public network.
 
@@ -214,11 +236,7 @@ tests/               test suite
 | **.NET 9** | ASP.NET Core Minimal API | the only thing you install |
 | **YamlDotNet** 18.1 | reads and writes the files | one NuGet package |
 | **Alpine.js** (CSP build) | 60 KB, vendored | no CDN, works offline |
-| `app.js` | 43 KB | state, routing, API calls |
-| `app.css` | 36 KB | one stylesheet |
-| `index.html` | 38 KB | every screen, as plain HTML |
-| C# | 1,776 lines | across the whole backend |
-| Tests | 183 | `dotnet test` |
+| `index.html` · `app.css` · `app.js` | the entire front end | three files, no build step |
 
 No Node, no npm, no bundler, no build step. Two dependencies in total.
 
