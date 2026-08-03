@@ -1,3 +1,4 @@
+using System.Globalization;
 using YamlDotNet.Core;
 
 namespace MiniTracker.Api.Backlog;
@@ -65,14 +66,18 @@ public static class BacklogValidation
 
         foreach (var epic in board.Epics)
         {
+            // Invariant, not the current culture: this string is matched against the text of a file,
+            // so it has to render the same digits on every machine that opens the backlog.
+            var epicNumber = epic.Number.ToString(CultureInfo.InvariantCulture);
+
             if (!seenEpics.Add(epic.Number))
                 issues.Add(new ValidationIssue("error", $"Epic {epic.Number} appears more than once.",
-                    At(file, lines, "number", epic.Number.ToString())));
+                    At(file, lines, "number", epicNumber)));
 
             foreach (var story in epic.Stories)
             {
                 var where = string.IsNullOrWhiteSpace(story.Code)
-                    ? At(file, lines, "number", epic.Number.ToString())
+                    ? At(file, lines, "number", epicNumber)
                     : At(file, lines, "code", story.Code);
 
                 if (string.IsNullOrWhiteSpace(story.Code))
