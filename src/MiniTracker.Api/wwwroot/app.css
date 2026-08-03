@@ -203,6 +203,9 @@ main{flex:1;min-width:0;padding:22px 24px 60px}
 .card.pad{padding:20px 22px}
 .empty{background:var(--surface2);border:1px dashed var(--border);border-radius:11px;padding:16px 18px;
   font-size:13px;color:var(--muted);max-width:1000px}
+/* An empty state that only describes the emptiness leaves you to work out the way out of it. */
+.empty p{margin:0 0 12px}
+.empty p:last-child{margin-bottom:0}
 .none{font-size:12.5px;color:var(--faint);padding:6px 0}
 .none.row{padding:8px 4px 8px 24px;margin:0;font-size:13px}
 
@@ -255,6 +258,12 @@ main{flex:1;min-width:0;padding:22px 24px 60px}
 .rel-head{display:flex;align-items:center;gap:10px;padding:6px 4px 6px 12px;border-left:3px solid var(--brand);
   border-bottom:1px solid var(--border);background:none;font-family:inherit;text-align:left}
 button.rel-head{border-top:none;border-right:none;cursor:pointer}
+/* The clickable variant was pixel-identical to the static one. The chevron carries the difference;
+   the hover tint only confirms it, and confirms nothing at all on a touch screen. */
+.rel-go{margin-left:2px;color:var(--faint);font-size:16px;line-height:1;transition:transform .12s ease,color .12s ease}
+.rel-open:hover{background:var(--surface2)}
+.rel-open:hover .rel-go{color:var(--brand);transform:translateX(2px)}
+.rel-open:focus-visible .rel-go{color:var(--brand)}
 .rel-tag{display:inline-flex;align-items:center;gap:5px;background:var(--surface2);color:var(--muted);
   border:1px solid var(--border);border-radius:5px;padding:2px 8px;font-family:'IBM Plex Mono',monospace;
   font-size:11px;font-weight:700;flex:none}
@@ -269,6 +278,14 @@ button.rel-head{border-top:none;border-right:none;cursor:pointer}
 .chip.sm{gap:5px;padding:2px 9px;font-size:11.5px;min-width:64px;justify-content:center}
 .chip.lg{padding:5px 13px;font-size:13px}
 .chip.row-badge{padding:3px 11px;font-size:11.5px;gap:6px}
+/* A status column, not a row of differently-sized pills. The chips already right-align, but their
+   width tracked the status word — "Done" 87px against "Not Yet Started" 141px — so everything to
+   their left, the release tag included, landed at a different x on every row. Reserving the widest
+   width is what makes both columns straight. Dropped below 769px, where the row restacks and the
+   space is worth more than the alignment. */
+@media (min-width:769px){
+  .chip.row-badge{min-width:146px;justify-content:center}
+}
 .st-nys{background:var(--st-nys-bg);color:var(--st-nys-fg);border-color:var(--st-nys-fg)}
 .st-rev{background:var(--st-rev-bg);color:var(--st-rev-fg);border-color:var(--st-rev-fg)}
 .st-ref{background:var(--st-ref-bg);color:var(--st-ref-fg);border-color:var(--st-ref-fg)}
@@ -282,8 +299,13 @@ button.rel-head{border-top:none;border-right:none;cursor:pointer}
 .chip.st-test,.chip.st-done,.chip.st-hold,.chip.st-fail{border-color:transparent}
 
 /* Release tag on a card. */
+/* min-width matches .chip.sm's reservation: a release is optional and varies in width (V1, V0.1,
+   V1.10), and without a fixed slot every status chip after it sat at a different x down the page. */
 .vtag{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;color:var(--muted);
-  border:1px solid var(--border);border-radius:5px;padding:1px 6px;background:var(--surface2);white-space:nowrap}
+  border:1px solid var(--border);border-radius:5px;padding:1px 6px;background:var(--surface2);white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;min-width:46px;flex:none}
+/* Hidden, not removed — it still has to hold the column open. */
+.vtag.empty{visibility:hidden}
 .vtag.lg{font-size:11px;padding:1px 7px}
 .scode{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
 .scode.lg{font-size:13px}
@@ -435,6 +457,12 @@ button.rel-head{border-top:none;border-right:none;cursor:pointer}
 .field input[type="file"]{padding:9px;cursor:pointer}
 .field input[aria-invalid="true"]{border-color:var(--err)}
 .hint{margin:6px 0 0;font-size:12px;color:var(--faint)}
+/* The path in full. A single-line input scrolls a long path out of sight, so the value it is
+   actually using was unreadable without clicking in and arrowing across. Wraps on purpose. */
+.pathnow{display:flex;align-items:baseline;gap:8px;margin:7px 0 0;font-size:12px;min-width:0}
+.pathnow .k{flex:none;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+.pathnow .mono{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted);
+  word-break:break-all;overflow-wrap:anywhere;min-width:0}
 .field-err{margin:6px 0 0;font-size:12.5px;font-weight:600;color:var(--err)}
 .form-err{margin:0 0 16px;font-size:13px;font-weight:600;color:var(--err);
   background:var(--fail-bg);border-radius:8px;padding:10px 12px}

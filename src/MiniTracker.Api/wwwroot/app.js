@@ -73,6 +73,8 @@ function decorate(board){
     const stories = (epic.stories || []).map(story => Object.assign({}, story, {
       statusClass: CLASS_FOR[story.status] || "st-nys",
       emoji:       EMOJI_FOR[story.status] || "⬜",
+      // A release is optional, so this slot is hidden rather than removed — see the row markup.
+      releaseSlotClass: story.release ? "" : "empty",
     }));
 
     const count = stories.length;
@@ -92,6 +94,30 @@ function decorate(board){
   if(chosen) chosen.isCurrent = true;
 
   return { project: board.project || "", epics, roadmap: board.roadmap || [] };
+}
+
+/**
+ * Drops a leading "# Title" heading, which the story page already shows above the card. Only the
+ * first heading and only when it is the first non-blank line — a SKILL.md that opens with prose
+ * keeps everything, and no other heading is touched.
+ */
+function withoutLeadingTitle(markdown){
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  let i = 0;
+
+  // Step over YAML frontmatter first. These files open with it, so without this the search below
+  // finds "---" instead of the heading and gives up — which is exactly what it did.
+  if(lines[0] === "---"){
+    const end = lines.indexOf("---", 1);
+    if(end > 0) i = end + 1;
+  }
+
+  while(i < lines.length && lines[i].trim() === "") i++;
+  if(i >= lines.length || !/^#\s+\S/.test(lines[i])) return markdown;
+
+  lines.splice(i, 1);
+  while(i < lines.length && lines[i].trim() === "") lines.splice(i, 1);
+  return lines.join("\n");
 }
 
 /** Adds the display fields to one story's tasks and test cases, once per load. */
@@ -236,6 +262,7 @@ document.addEventListener("alpine:init", () => {
     storyCode: null,
     releaseTag: null,
     editingEpic: null,
+    seedEpic: null,          // which epic the add-story form should preselect, if reached from one
 
     winWidth: window.innerWidth,
     sidebarCollapsed: false,
@@ -412,8 +439,12 @@ document.addEventListener("alpine:init", () => {
       this.drawerOpen = false;
       if(page === "configure") this.form = { backlogPath: this.config.backlogPath || "", skillsPath: this.config.skillsPath || "" };
       if(page === "add-epic")  this.form = { title:"" };
-      if(page === "add-story") this.form = { epicNumber: String(this.board.epics.length ? this.board.epics[0].number : 0),
+      // seedEpic is set when Add is reached from inside an epic, so the dropdown already names the
+      // epic you were looking at rather than the first one on the board.
+      if(page === "add-story") this.form = { epicNumber: String(this.seedEpic != null ? this.seedEpic
+                                               : (this.board.epics.length ? this.board.epics[0].number : 0)),
                                              title:"", release:"", description:"" };
+      this.seedEpic = null;
       if(page === "edit-epic") this.form = { title: this.epicOf(this.editingEpic) ? this.epicOf(this.editingEpic).title : "" };
       if(page === "edit-story") this.form = { title: this.story ? this.story.title : "",
                                               release: this.story ? this.story.release : "" };
@@ -440,6 +471,7 @@ document.addEventListener("alpine:init", () => {
     goConfigure(){ this.openPage("configure"); },
     goAddEpic(){ this.openPage("add-epic"); },
     goAddStory(){ this.openPage("add-story"); },
+    goAddStoryHere(){ this.seedEpic = this.epicNumber; this.openPage("add-story"); },
     goRenameEpic(){ this.editingEpic = this.epicNumber; this.openPage("edit-epic"); },
     goEditStory(){ if(this.story) this.openPage("edit-story"); },
 
@@ -815,7 +847,10 @@ document.addEventListener("alpine:init", () => {
         if(!res.ok) throw new Error(text || "This description could not be opened.");
         if(this.skill.path !== path) return;      // a different story was opened meanwhile
         this.skill.original = text;
-        this.skill.html = renderMarkdown(text);
+        // The page already shows the story title above this card, and SKILL.md opens with the same
+        // title as its H1 — so it appeared twice, one line apart. Dropped for display only; the
+        // editor and the saved file keep it, because the file has to stand on its own on disk.
+        this.skill.html = renderMarkdown(withoutLeadingTitle(text));
       }catch(e){
         this.skill.error = e.message || "This description could not be opened.";
       }finally{
@@ -918,8 +953,12 @@ document.addEventListener("alpine:init", () => {
       if(!title) return;
       this.saving = true;
       try{
-        this.board = decorate(await api("/api/epic", "POST", { number: this.nextEpicNumber, title }));
-        this.goBoard();
+        const number = this.nextEpicNumber;
+        this.board = decorate(await api("/api/epic", "POST", { number, title }));
+        // Open the epic just created, the same way adding a story opens the story. Returning to the
+        // Overview meant the two add flows ended somewhere different for no reason, and left you to
+        // find the thing you had just made.
+        this.openEpicByNumber(number);
         this.toast("Epic added");
       }catch(e){ this.err.form = e.message || "The epic could not be added."; }
       finally{ this.saving = false; }
@@ -1030,7 +1069,16 @@ document.addEventListener("alpine:init", () => {
     },
     // With a logo set the slot behaves like any site logo and goes home; while it is still the
     // empty "+" placeholder its only useful job is to take you somewhere you can set one.
-    clickLogo(){ this.hasLogo ? this.goBoard() : this.goConfigure(); },
+    /**
+     * The logo is a real <a href="/">, so the browser handles ctrl-click, middle-click and
+     * "open in new tab" natively. A plain left click is taken over here instead, because the
+     * board is already loaded and swapping the view beats a full round trip.
+     */
+    logoNav(e){
+      if(!e || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
+      e.preventDefault();
+      this.goBoard();
+    },
 
     async removeLogo(){
       try{
