@@ -38,17 +38,3 @@ Owned by US-03 (Day 0 — Local Setup).
 - [ ] AC2: The health endpoint returns 200 on a clean checkout, confirming the app started and can
   reach its database.
 - [ ] AC3: Database migrations apply cleanly against an empty database with no manual intervention.
-
-## Technical Reference
-
-See `@detailed-designs/setup.md` for the exact toolchain versions, the health endpoint's response
-shape, and the migration runner's ordering rules.
-
-## Notes / Gotchas
-
-- The health endpoint must check the database connection, not just that the process is alive — a
-  process that's up but can't reach its database is not healthy.
-- Migrations must be idempotent against re-runs in CI, since a fresh database is provisioned for
-  every test run rather than reused.
-- Keep the toolchain document a single source of truth; a second copy of version numbers in a wiki
-  page will drift the first time someone upgrades locally and forgets to update both.

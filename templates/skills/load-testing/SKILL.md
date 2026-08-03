@@ -32,19 +32,3 @@ high-level intent, e.g. `docs/designs/[screen].png`.]
 
 - [ ] AC1: [Condition]
 - [ ] AC2: [Condition]
-
-## Test Cases
-
-> Each test case traces back to an Acceptance Criterion (AC#).
-
-| Test Case | Traces to | Input | Expected Result |
-|---|---|---|---|
-| TC1 | AC1 | ... | ... |
-
-## Technical Reference
-
-See `@detailed-designs/[module].md` for flows, data model, API contract, and business rules.
-
-## Notes / Gotchas
-
-[Edge cases worth flagging]

@@ -107,9 +107,14 @@ public class BacklogValidationTests : IDisposable
         var report = BacklogValidation.Check(Backlog, Skills);
 
         var issue = Assert.Single(report.Issues, i => i.Message.Contains("\"template\""));
-        Assert.Contains("has files in it", issue.Message);
-        Assert.Contains("does not add a story", issue.Message);
-        Assert.Contains("delete the folder", issue.Message);
+
+        // The three things the first version left out, which is why it could not be acted on:
+        // where the folder is, what is in it, and that the backlog was searched and came up empty.
+        Assert.Contains(kept, issue.Detail);
+        Assert.Contains("SKILL.md", issue.Detail);
+        Assert.Contains("BACKLOG.yaml", issue.Detail);
+        Assert.Contains("found none", issue.Detail);
+        Assert.Contains("delete the folder", issue.Detail, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -122,8 +127,50 @@ public class BacklogValidationTests : IDisposable
         var report = BacklogValidation.Check(Backlog, Skills);
 
         var issue = Assert.Single(report.Issues, i => i.Message.Contains("\"expense\""));
-        Assert.Contains("is empty", issue.Message);
-        Assert.DoesNotContain("has files in it", issue.Message);
+        Assert.Contains("it is empty", issue.Message);
+        Assert.Contains("the folder is empty", issue.Detail);
+    }
+
+    [Fact]
+    public void Every_index_issue_names_the_file_and_the_line_it_is_on()
+    {
+        // "US-01 is not a status" without a line number means searching the file by hand, which is
+        // the whole complaint this exists to answer.
+        WriteIndex(Good.Replace("status: Done", "status: Finished"));
+        Directory.CreateDirectory(Path.Combine(Skills, "board"));
+
+        var report = BacklogValidation.Check(Backlog, Skills);
+
+        var issue = Assert.Single(report.Issues, i => i.Message.Contains("Finished"));
+        Assert.Equal("BACKLOG.yaml line 7", issue.Where);   // the "code: US-01" line
+    }
+
+    [Fact]
+    public void The_line_is_the_offending_story_not_simply_the_first_match()
+    {
+        WriteIndex("""
+            project: Test
+            roadmap: [V1]
+            epics:
+              - number: 0
+                title: Tooling
+                stories:
+                  - code: US-01
+                    title: One
+                    status: Done
+                    folder: one
+                  - code: US-02
+                    title: Two
+                    status: Finished
+                    folder: two
+            """);
+        Directory.CreateDirectory(Path.Combine(Skills, "one"));
+        Directory.CreateDirectory(Path.Combine(Skills, "two"));
+
+        var report = BacklogValidation.Check(Backlog, Skills);
+
+        var issue = Assert.Single(report.Issues, i => i.Message.Contains("Finished"));
+        Assert.Equal("BACKLOG.yaml line 11", issue.Where);   // US-02, not US-01
     }
 
     [Fact]

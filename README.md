@@ -15,6 +15,9 @@ Responsive down to 320px — the same board on a phone, with the destinations mo
 
 **You need one thing to install:** [.NET 9 or higher](https://dotnet.microsoft.com/download).
 
+Windows, Linux and macOS all work — there is no shell scripting anywhere in the app, and CI builds
+and tests it on Linux on every push.
+
 Check what you have:
 
 ```bash
@@ -270,7 +273,7 @@ dotnet test
 
 **Next release — v1.0**, after testing and confirmation.
 
-- Dockerfile, so it runs anywhere without installing .NET
+- Dockerfile, for deploying it to a container host — and for trying it without leaving anything installed
 - A devcontainer, so it opens straight in GitHub Codespaces
 
 **Later, if people find it useful.**

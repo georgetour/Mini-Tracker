@@ -129,6 +129,34 @@ public class TemplateFileTests
     }
 
     [Fact]
+    public void Every_story_is_Description_Tasks_Acceptance_Criteria_and_nothing_else()
+    {
+        // A story is prose; anything with state you tick is YAML. A "## Test Cases" table in
+        // SKILL.md is the same data as test-cases.yaml written twice, which is exactly the
+        // duplication the split storage exists to avoid. The demo shipped with eleven of them.
+        var expected = new[] { "## Description", "## Tasks", "## Acceptance Criteria" };
+
+        foreach (var skill in Directory.GetFiles(SkillsDir(), "SKILL.md", SearchOption.AllDirectories))
+        {
+            var headings = File.ReadAllLines(skill)
+                .Where(l => l.StartsWith("## ", StringComparison.Ordinal))
+                .ToArray();
+
+            Assert.Equal(expected, headings);
+        }
+    }
+
+    [Fact]
+    public void The_scaffold_a_new_story_is_created_from_has_the_same_three_sections()
+    {
+        var headings = File.ReadAllLines(TemplateLocator.Find("SKILL.template.md"))
+            .Where(l => l.StartsWith("## ", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.Equal(new[] { "## Description", "## Tasks", "## Acceptance Criteria" }, headings);
+    }
+
+    [Fact]
     public void Every_release_used_by_a_story_is_declared_in_the_roadmap()
     {
         var board = Template();

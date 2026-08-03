@@ -57,14 +57,23 @@ public static class BacklogValidation
         var seenEpics = new HashSet<int>();
         var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Every issue below points at a line in this file. The board is parsed into objects, which
+        // do not carry their position, so the line is found back in the text — otherwise the report
+        // names a story and leaves you to search a 300-line file for it.
+        var file = Path.GetFileName(backlogPath);
+        var lines = backlogText.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+
         foreach (var epic in board.Epics)
         {
             if (!seenEpics.Add(epic.Number))
-                issues.Add(new ValidationIssue("error", $"Epic {epic.Number} appears more than once.", null));
+                issues.Add(new ValidationIssue("error", $"Epic {epic.Number} appears more than once.",
+                    At(file, lines, "number", epic.Number.ToString())));
 
             foreach (var story in epic.Stories)
             {
-                var where = string.IsNullOrWhiteSpace(story.Code) ? $"epic {epic.Number}" : story.Code;
+                var where = string.IsNullOrWhiteSpace(story.Code)
+                    ? At(file, lines, "number", epic.Number.ToString())
+                    : At(file, lines, "code", story.Code);
 
                 if (string.IsNullOrWhiteSpace(story.Code))
                     issues.Add(new ValidationIssue("error", $"A story in epic {epic.Number} has no code.", where));
@@ -105,7 +114,7 @@ public static class BacklogValidation
                     continue;
                 }
 
-                CheckFolderName(story, issues);
+                CheckFolderName(story, where, issues);
                 CheckStoryStructure(dir, story, issues);
                 CheckStoryFiles(skillsRoot, story, issues);
             }
@@ -116,7 +125,7 @@ public static class BacklogValidation
             foreach (var dir in Directory.GetDirectories(skillsRoot))
             {
                 var name = Path.GetFileName(dir);
-                if (!referenced.Contains(name)) CheckUnreferencedFolder(dir, name, issues);
+                if (!referenced.Contains(name)) CheckUnreferencedFolder(dir, name, file, issues);
             }
         }
 
@@ -134,20 +143,57 @@ public static class BacklogValidation
     /// An empty folder and a folder full of work are not the same problem, so they do not get the
     /// same sentence: one is leftovers, the other is writing that nothing links to.
     /// </summary>
-    private static void CheckUnreferencedFolder(string dir, string name, List<ValidationIssue> issues)
+    /// <summary>
+    /// "BACKLOG.yaml line 42" for the line that sets <paramref name="key"/> to
+    /// <paramref name="value"/>, or just the file name when it cannot be found.
+    ///
+    /// Matching on the text rather than tracking positions through the parser is deliberate: the
+    /// values looked up here (a story code, an epic number) are unique by definition, and anything
+    /// that makes them not unique is itself one of the errors reported above.
+    /// </summary>
+    private static string At(string file, string[] lines, string key, string value)
     {
-        var empty = !Directory.EnumerateFileSystemEntries(dir).Any();
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart(' ', '-', '\t');
+            if (!trimmed.StartsWith(key + ":", StringComparison.Ordinal)) continue;
 
-        var what = empty
-            ? $"The folder \"{name}\" is empty and no story points at it."
-            : $"The folder \"{name}\" has files in it, but no story points at it, so nothing in it "
-            + "is shown anywhere.";
+            var actual = trimmed[(key.Length + 1)..].Trim().Trim('\'', '"');
+            if (actual.Equals(value, StringComparison.OrdinalIgnoreCase)) return $"{file} line {i + 1}";
+        }
+        return file;
+    }
 
-        issues.Add(new ValidationIssue("warning",
-            $"{what} Adding a folder does not add a story — the backlog file is what decides which "
-          + $"stories exist. To keep it, add a user story and set its folder to \"{name}\"; "
-          + "otherwise delete the folder.",
-            name));
+    private static void CheckUnreferencedFolder(string dir, string name, string file, List<ValidationIssue> issues)
+    {
+        var entries = Directory.EnumerateFileSystemEntries(dir)
+                               .Select(Path.GetFileName).Take(5).ToList();
+
+        var message = entries.Count == 0
+            ? $"No story points at the folder \"{name}\", and it is empty."
+            : $"No story points at the folder \"{name}\", so the files in it are not shown anywhere.";
+
+        // The first version of this said only that the folder was unreferenced, which sent the
+        // reader hunting for a folder whose location was never given and left them unable to
+        // confirm the claim. Say where it is, what is in it, and what was looked for.
+        var detail =
+            $"""
+             Folder on disk:
+               {dir}
+
+             What is in it:
+               {(entries.Count == 0 ? "(nothing — the folder is empty)" : string.Join(", ", entries))}
+
+             Why this is a warning:
+               Searched {file} for a story with "folder: {name}" and found none — on no line.
+               The backlog file decides which stories exist; a folder on its own is just a folder.
+
+             To keep it:   add a user story and set its folder to "{name}".
+             To remove it: delete the folder.
+             """;
+
+        // No line number to give here, and that is the finding: the name appears nowhere in the file.
+        issues.Add(new ValidationIssue("warning", message, $"{file} (not referenced)", detail));
     }
 
     /// <summary>A folder name that is not a plain slug. It works on Windows and breaks on Linux —
@@ -155,7 +201,7 @@ public static class BacklogValidation
     private static readonly System.Text.RegularExpressions.Regex CleanSlug =
         new(@"^[a-z0-9]+(?:-[a-z0-9]+)*$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    private static void CheckFolderName(Story story, List<ValidationIssue> issues)
+    private static void CheckFolderName(Story story, string where, List<ValidationIssue> issues)
     {
         if (CleanSlug.IsMatch(story.Folder)) return;
 
@@ -169,7 +215,7 @@ public static class BacklogValidation
             $"The folder \"{story.Folder}\" is not a plain slug — {why}. Rename the folder to "
           + $"\"{suggestion}\" and set {story.Code}'s folder to match. Windows ignores capitals and "
           + "Linux does not, so a name like this works on one machine and not the next.",
-            story.Code));
+            where));
     }
 
     /// <summary>The files a story folder is meant to hold. Missing tasks or test cases just means an

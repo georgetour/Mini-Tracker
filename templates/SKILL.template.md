@@ -6,45 +6,31 @@ description: >
 
 # [Skill Name]
 
+> A user story is **Description → Tasks → Acceptance Criteria** only. Nothing else belongs in this file:
+> - **Tasks** are tracked (with done-state) in `tasks.yaml`.
+> - **Test cases** are tracked (with pass/fail) in `test-cases.yaml` — not listed here.
+> - **Technical detail, flows, data model, gotchas** live in `docs/detailed-designs/[module].md`.
+
 ## Description
 
-[Plain, precise description of what happens and why — written so a developer
-knows exactly what to build, and a BA/stakeholder can follow it without
-needing technical background. Use "As a [actor], I want to [action], so
-that [benefit]" when there's a real user or role initiating it. Use a
-direct system-behavior description when it's automation/scheduled/event-driven.
-Reference related design images or diagrams here if they help explain the
-high-level intent, e.g. `docs/designs/[screen].png`.]
+[Plain, precise description of what happens and why — written so a developer knows exactly what to
+build, and a BA or stakeholder can follow it without needing technical background. Use "As a
+[actor], I want to [action], so that [benefit]" when there is a real user or role initiating it.
+Use a direct system-behavior description when it is automation, scheduled, or event-driven.
+Reference related design images here if they help explain the intent, e.g. `docs/designs/[screen].png`.]
 
 ## Tasks
 
-> One deliverable per task; tag each with the acceptance criterion(s) it satisfies, so task↔AC is
-> explicit and a developer can see what "done" looks like. Functional, not code — the *how* lives in
-> the detailed design. Don't bundle several features into one vague task.
+> One deliverable per task; each names the acceptance criterion it satisfies. Functional, not code —
+> the *how* lives in the detailed design. Mirror these into `tasks.yaml`.
 
-1. **[Deliverable 1]** — what it does (e.g. "Build the X API — create, list, edit, delete; owner-scoped"). *(→ AC1, AC4)*
-2. **[Deliverable 2]** — what it does (e.g. "Build the X page — list / add / edit / delete"). *(→ AC2, AC3)*
-3. **Tests** — API/service + Playwright E2E covering each acceptance criterion. *(→ all AC)*
+1. **[Deliverable 1]** — what it does. *(→ AC1)*
+2. **[Deliverable 2]** — what it does. *(→ AC2)*
 
 ## Acceptance Criteria
 
-> The continuation of the tasks — testable conditions that define "done." Each becomes a test case below.
+> The continuation of the tasks — testable conditions that define "done". The ones you actually
+> execute become entries in `test-cases.yaml`.
 
-- [ ] AC1: [Condition]
-- [ ] AC2: [Condition]
-
-## Test Cases
-
-> Each test case traces back to an Acceptance Criterion (AC#).
-
-| Test Case | Traces to | Input | Expected Result |
-|---|---|---|---|
-| TC1 | AC1 | ... | ... |
-
-## Technical Reference
-
-See `@detailed-designs/[module].md` for flows, data model, API contract, and business rules.
-
-## Notes / Gotchas
-
-[Edge cases worth flagging]
+- [ ] **AC1** — [observable, checkable outcome]
+- [ ] **AC2** — [observable, checkable outcome]
