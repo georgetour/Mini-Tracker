@@ -68,9 +68,13 @@ button, PowerShell, React/Node), it was very likely already considered and rejec
   input before any transform runs and rejects link schemes other than http/https/mailto/anchor.
 - **Status colours are CSS classes (`.st-done`), never bound inline styles.** An inline style beats
   every class rule, which is exactly how hover states here broke twice.
-- **`SKILL.md` is prose, edited whole.** The story page shows it rendered and offers a plain text
-  editor over the raw markdown. The app never parses it for structure — its `## Tasks` section is
-  the refinement narrative, deliberately a different thing from the tickable `tasks.yaml` beside it.
+- **`SKILL.md` is prose, edited whole, and is exactly three sections:** Description, Tasks,
+  Acceptance Criteria. Nothing else belongs in it — a `## Test Cases` table is the same data as
+  `test-cases.yaml` written twice, which is the duplication the split storage exists to avoid, and
+  technical detail belongs in your own design docs. The story page shows it rendered and offers a
+  plain text editor over the raw markdown; the leading `# Title` is dropped for display only,
+  because the page already shows it. Its `## Tasks` section is the refinement narrative,
+  deliberately a different thing from the tickable `tasks.yaml` beside it. Two tests pin the shape.
 - **An epic page lists its stories and nothing else.** No task meters, no expanded test cases —
   those belong to the story page, and repeating them would both duplicate that page and force the
   board to load detail it doesn't show. This UI rule is what makes the thin index sufficient.
@@ -120,16 +124,26 @@ button, PowerShell, React/Node), it was very likely already considered and rejec
 
 ## Current build status
 
-**Done** (147 tests green, verified end-to-end):
+**Done** (whole suite green, verified end-to-end — run `dotnet test` for the count rather than
+trusting a number written here, which goes stale within a day):
 
 *Storage*
 - `Backlog/YamlIndex.cs` — reads and writes `BACKLOG.yaml`; deterministic output, so one status
   change is one line of diff. Assigns slugs on every read
 - `Backlog/StoryFolder.cs` — one story's folder: `SKILL.md`, `tasks.yaml`, `test-cases.yaml`.
   Refuses any folder name that would escape the skills root
-- `Backlog/BacklogValidation.cs` — YAML errors with line and column, plus the index↔folder integrity
-  checks: missing folders (error), unreferenced folders (warning), unknown status words, releases
-  not in the roadmap
+- `Backlog/BacklogValidation.cs` — every issue names the file and the line it is on, plus the
+  index↔folder integrity checks: missing folders (error), unreferenced folders (warning), unknown
+  status words, releases not in the roadmap. The board is parsed into objects, which carry no
+  position, so the line is found back in the text by the story's code
+- `Backlog/YamlDiagnostic.cs` — turns a parse error into an edit. Where the mistake is recognisable
+  (shell `'\''` escaping, a tab in the indentation, an unquoted colon, a repeated key) it prints the
+  corrected line to paste over the original; otherwise the parser's own words plus a caret. Duplicate
+  keys are rejected by both readers rather than silently keeping the last one
+- `Backlog/PathSafety.cs` — the one place that decides whether a resolved path is inside a root.
+  `NormaliseSeparators` first, because `\` is a separator on Windows and an ordinary filename
+  character on Linux — so `folder: ..\outside` was harmless on one and a traversal on the other,
+  from the same file in git
 - `Backlog/Slugs.cs` — URL segments from titles; unique, accent-stripped, and kept off the app's own
   paths so an epic called "Configure" can't take `/configure`
 
@@ -155,7 +169,17 @@ button, PowerShell, React/Node), it was very likely already considered and rejec
   page owns tasks and test cases with inline add / edit / delete
 - `wwwroot/app.js` — one `Alpine.data('tracker')` component. `decorate()` shapes the index;
   `loadDetail()` fetches a story's folder only when that story opens
-- Sync shows a validation banner: severity, message, and which file or story it came from
+- Sync shows a validation banner: severity, message, the file and line it came from, and for a
+  recognised YAML mistake the corrected line
+
+*Build and CI*
+- `.editorconfig` + `Directory.Build.props` — naming rules and .NET analyzers, enforced by the build
+  (`EnforceCodeStyleInBuild`). Warnings become errors only under `ContinuousIntegrationBuild`, so
+  half-finished code still builds locally but nothing untidy reaches `main`
+- `.github/workflows/ci.yml` — restore, build, test on **Linux**. That is what catches the
+  case-sensitivity and path-separator bugs a Windows-only run hides
+- `.github/workflows/codeql.yml` — security analysis on push, PR and weekly. Explicit build rather
+  than autobuild, because the runner image does not reliably carry .NET 9
 
 **Not yet built** — pick up here:
 1. **Warn when marking Done with unfinished tasks.** The board no longer loads task counts, so this
@@ -175,6 +199,17 @@ the migration tests, so it's fully self-contained; no external repo or sibling c
 
 Server-side validation is not optional: every endpoint validates again regardless of what the browser
 already checked, and each rule has a rejection test written before its UI.
+
+**Reproduce CI before claiming a change is good.** `-p:ContinuousIntegrationBuild=true` on
+`dotnet test` does not force a recompile, so an incremental run reports success without the
+analyzers having looked at the file you just edited — that shipped a broken build twice. Delete
+`bin`/`obj`, then:
+
+```bash
+dotnet restore
+dotnet build --no-restore -p:ContinuousIntegrationBuild=true
+dotnet test  --no-build   -p:ContinuousIntegrationBuild=true
+```
 
 ## Running it
 
