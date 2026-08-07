@@ -18,6 +18,14 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
+      # The UI tests install Chromium on first use. Without this the download is repeated on every
+      # run; the browser only changes when the Playwright package version does, so that is the key.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-1.49.0
+
       - name: Restore
         run: dotnet restore
 
