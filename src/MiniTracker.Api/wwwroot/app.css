@@ -564,7 +564,13 @@ dialog .err{margin:0 0 12px;font-size:13px;font-weight:600;color:var(--err);
   /* The top bar is identity only: logo, name, theme. Every action moves to the bottom bar — and
      the drawer goes with them, because the bottom bar already reaches both destinations and the
      Overview lists the epics. Two ways to the same two places is one way too many. */
-  .addwrap,#btnConfigure,#btnSync,#btnStage,#hamburger,#sidebar,#scrim{display:none}
+  #btnConfigure,#btnSync,#btnStage,#hamburger,#sidebar,#scrim{display:none}
+  /* The add menu is a child of .addwrap, so hiding the wrapper hid the menu with it and the bottom
+     bar's + had nothing to open — display:none removes the whole subtree, and the fixed position
+     below cannot escape it. Hide the pill instead, and let the wrapper stop being a box at all so
+     it contributes no width and no flex gap. */
+  .addwrap{display:contents}
+  #btnAdd{display:none}
   .hwrap{gap:10px;padding:0 12px}
   /* Room for the bottom bar, including the home indicator on notched phones. */
   main,#pages{padding:16px 14px calc(84px + env(safe-area-inset-bottom,0px))}

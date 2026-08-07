@@ -63,6 +63,22 @@ public class MarkupContractTests
     }
 
     [Fact]
+    public void Hiding_the_top_bar_actions_on_mobile_does_not_hide_the_add_menu_with_them()
+    {
+        // #addMenu is a child of .addwrap. The mobile breakpoint used to hide .addwrap outright,
+        // which removed the menu's whole subtree — so the bottom bar's + had nothing to open, and
+        // no amount of position:fixed on the menu could escape a display:none parent. The pill is
+        // what should be hidden; the wrapper has to stay renderable.
+        var css = Read("app.css");
+
+        // Asserted against the whole file rather than a extracted media block: there are two
+        // max-width:768px blocks, and matching "the" block picks whichever comes first.
+        Assert.DoesNotMatch(@"\.addwrap[^{}\n]*\{[^}]*display:\s*none", css);
+        Assert.Contains(".addwrap{display:contents}", css);
+        Assert.Contains("#btnAdd{display:none}", css);
+    }
+
+    [Fact]
     public void The_release_slot_is_hidden_rather_than_removed_so_the_columns_stay_straight()
     {
         // x-show would collapse the slot, and a release is optional — which left every status chip
