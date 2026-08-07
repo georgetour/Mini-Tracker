@@ -1,0 +1,35 @@
+{
+  "name": "Mini Tracker",
+
+  // The .NET SDK image rather than the app's own Dockerfile: a container that runs the app wants
+  // only the ASP.NET runtime, while this one has to build and test it too. Different jobs.
+  "image": "mcr.microsoft.com/devcontainers/dotnet:1-9.0",
+
+  "forwardPorts": [5249],
+  "portsAttributes": {
+    "5249": {
+      "label": "Mini Tracker",
+      "onAutoForward": "openBrowser"
+    }
+  },
+
+  // Bind to every interface, not just loopback. Inside a container "localhost" is the container,
+  // and the port forwarder is the classic thing that then silently fails to see the app.
+  "containerEnv": {
+    "ASPNETCORE_URLS": "http://0.0.0.0:5249",
+    "DOTNET_NOLOGO": "true"
+  },
+
+  "postCreateCommand": "dotnet restore",
+
+  // Runs on every attach, so reopening the Codespace brings the board back rather than an editor
+  // with nothing running. First launch lands on the demo backlog: nothing is configured, so the
+  // app materialises templates/ into a real, writable copy.
+  "postAttachCommand": "dotnet run --project src/MiniTracker.Api",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-dotnettools.csdevkit"]
+    }
+  }
+}
