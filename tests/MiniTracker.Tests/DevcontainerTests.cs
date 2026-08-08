@@ -42,6 +42,21 @@ public class DevcontainerTests
     }
 
     [Fact]
+    public void Attaching_twice_does_not_start_a_second_copy()
+    {
+        // postAttachCommand runs on every attach, and a browser reconnecting counts. Unguarded,
+        // the second run bound a port the first was holding and died with a page of stack trace —
+        // which is what someone opening the badge actually saw.
+        var attach = Parse().RootElement.GetProperty("postAttachCommand").GetString()!;
+
+        Assert.Contains("||", attach);
+        Assert.Contains("curl", attach);
+        // Not pgrep: the shell running this command has the project name in its own command line,
+        // so a process check would always match itself and never start the app.
+        Assert.DoesNotContain("pgrep", attach);
+    }
+
+    [Fact]
     public void The_port_it_forwards_is_the_port_it_starts_on()
     {
         // Two numbers that have to agree; nothing but this notices when they stop.

@@ -21,15 +21,20 @@
   // packages, which nobody opening a Codespace to look at the board needs.
   "postCreateCommand": "dotnet restore src/MiniTracker.Api",
 
+  // Started only if nothing is answering yet. postAttachCommand runs on *every* attach, and a
+  // browser reconnecting counts — so the second run tried to bind a port the first was already
+  // holding and died with a page of stack trace, which is what a visitor saw.
+  //
+  // The guard asks the port rather than looking for the process: the shell running this command
+  // has "MiniTracker.Api" in its own command line, so a pgrep would always match itself.
+  //
   // --urls on the command line, not ASPNETCORE_URLS in the environment. `dotnet run` applies
   // launchSettings.json, whose applicationUrl is http://localhost:5249, and that overrides the
   // ambient variable — so the app bound loopback only and the port forwarder had nothing to see.
-  // Verified by curling the container's own IP rather than localhost, which succeeds either way.
   //
-  // Runs on every attach, so reopening the Codespace brings the board back rather than an editor
-  // with nothing running. First launch lands on the demo backlog: nothing is configured, so the
-  // app materialises templates/ into a real, writable copy.
-  "postAttachCommand": "dotnet run --project src/MiniTracker.Api --urls http://0.0.0.0:5249",
+  // First launch lands on the demo backlog: nothing is configured, so the app materialises
+  // templates/ into a real, writable copy.
+  "postAttachCommand": "curl -sf -o /dev/null --max-time 2 http://localhost:5249/api/board || dotnet run --project src/MiniTracker.Api --urls http://0.0.0.0:5249",
 
   "customizations": {
     "vscode": {
