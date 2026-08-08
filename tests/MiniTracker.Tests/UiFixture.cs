@@ -85,6 +85,16 @@ public sealed class UiFixture : IAsyncLifetime
         res.EnsureSuccessStatusCode();
     }
 
+    /// <summary>Clears the logo. One app serves the whole collection, so a test that sets one has
+    /// to put it back — with a logo present the slot is a link rather than the "+" button, which
+    /// decides what a later test sees.</summary>
+    public async Task ClearLogoAsync()
+    {
+        using var http = new HttpClient();
+        var res = await http.DeleteAsync($"{BaseUrl}/api/config/logo");
+        res.EnsureSuccessStatusCode();
+    }
+
     /// <summary>Uploads a logo through the app's own endpoint, so the logo-set state is reached the
     /// way a person reaches it rather than by writing config behind the app's back.</summary>
     public async Task SetLogoAsync()

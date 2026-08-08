@@ -60,33 +60,41 @@ public class UiTests(UiFixture fx)
     [Fact]
     public async Task The_logo_slot_becomes_a_real_link_once_a_logo_is_set()
     {
-        // One test rather than two, because setting a logo changes shared state — split across two
-        // tests, whichever ran first decided the other's result.
-        //
-        // The transition is the point: with nothing to link to it is the button that opens
-        // Configure; with a logo it must be an anchor, because no amount of JavaScript makes a
-        // <button> ctrl-clickable into a new tab.
-        // Located by tag deliberately, and asserted with Expect so it retries: the config arrives
-        // asynchronously, so checking the element the instant the page loads is a race.
-        var (page, _) = await fx.NewPageAsync();
-        await page.GotoAsync(fx.BaseUrl);
-
-        await Assertions.Expect(page.Locator("button#logoSlot")).ToBeVisibleAsync();
-        await page.Locator("#logoSlot").ClickAsync();
-        await Assertions.Expect(page).ToHaveURLAsync($"{fx.BaseUrl}/configure");
-
-        await fx.SetLogoAsync();
-        await page.GotoAsync(fx.BaseUrl);
-
-        await Assertions.Expect(page.Locator("a#logoSlot")).ToBeVisibleAsync();
-        await Assertions.Expect(page.Locator("#logoSlot")).ToHaveAttributeAsync("href", "/");
-
-        // And prove the point: ctrl-click opens a second tab.
-        await page.GotoAsync($"{fx.BaseUrl}/tooling");
-        await Assertions.Expect(page.Locator("a#logoSlot")).ToBeVisibleAsync();
-        var opened = await page.Context.RunAndWaitForPageAsync(async () =>
-            await page.Locator("#logoSlot").ClickAsync(new() { Modifiers = [KeyboardModifier.ControlOrMeta] }));
-        Assert.NotNull(opened);
+        try
+        {
+            // One test rather than two, because setting a logo changes shared state — split across two
+            // tests, whichever ran first decided the other's result.
+            //
+            // The transition is the point: with nothing to link to it is the button that opens
+            // Configure; with a logo it must be an anchor, because no amount of JavaScript makes a
+            // <button> ctrl-clickable into a new tab.
+            // Located by tag deliberately, and asserted with Expect so it retries: the config arrives
+            // asynchronously, so checking the element the instant the page loads is a race.
+            var (page, _) = await fx.NewPageAsync();
+            await page.GotoAsync(fx.BaseUrl);
+    
+            await Assertions.Expect(page.Locator("button#logoSlot")).ToBeVisibleAsync();
+            await page.Locator("#logoSlot").ClickAsync();
+            await Assertions.Expect(page).ToHaveURLAsync($"{fx.BaseUrl}/configure");
+    
+            await fx.SetLogoAsync();
+            await page.GotoAsync(fx.BaseUrl);
+    
+            await Assertions.Expect(page.Locator("a#logoSlot")).ToBeVisibleAsync();
+            await Assertions.Expect(page.Locator("#logoSlot")).ToHaveAttributeAsync("href", "/");
+    
+            // And prove the point: ctrl-click opens a second tab.
+            await page.GotoAsync($"{fx.BaseUrl}/tooling");
+            await Assertions.Expect(page.Locator("a#logoSlot")).ToBeVisibleAsync();
+            var opened = await page.Context.RunAndWaitForPageAsync(async () =>
+                await page.Locator("#logoSlot").ClickAsync(new() { Modifiers = [KeyboardModifier.ControlOrMeta] }));
+            Assert.NotNull(opened);
+        }
+        finally
+        {
+            // Restores the no-logo state: with a logo set the slot is a link, not the "+" button.
+            await fx.ClearLogoAsync();
+        }
     }
 
     [Fact]
@@ -137,6 +145,19 @@ public class UiTests(UiFixture fx)
         // And Configure is still reachable, now via the project you picked.
         await page.Locator("button:has-text('Configure this project')").ClickAsync();
         await Assertions.Expect(page).ToHaveURLAsync($"{fx.BaseUrl}/configure");
+    }
+
+    [Fact]
+    public async Task The_logo_slot_does_something_even_when_already_on_Configure()
+    {
+        // Found by clicking every control on every screen: on Configure this button took you to the
+        // page you were already on, so it did nothing at all.
+        var (page, _) = await fx.NewPageAsync();
+        await page.GotoAsync($"{fx.BaseUrl}/configure");
+
+        await page.Locator("#logoSlot").ClickAsync();
+
+        await Assertions.Expect(page.Locator("#cfgLogo")).ToBeFocusedAsync();
     }
 
     [Fact]

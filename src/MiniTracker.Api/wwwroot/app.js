@@ -565,6 +565,13 @@ document.addEventListener("alpine:init", () => {
     goBoard(push){ this.show("board", push); },
     goReleases(push){ this.show("releases", push); },
     goConfigure(){ this.openPage("configure"); },
+    /** The "+" logo slot. On Configure it would otherwise be a button that does nothing, because
+     *  it is already showing the page it takes you to — so it puts you in the file picker instead. */
+    setLogo(){
+      if(this.page === "configure") return this.focusRef("logo");
+      this.goConfigure();
+    },
+
     goProjects(){ this.openPage("projects"); },
     goAddProject(){ this.openPage("add-project"); },
     goRemoveProject(p){ this.removing = p; this.openPage("remove-project"); },
