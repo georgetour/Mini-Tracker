@@ -19,6 +19,11 @@ reference/
 
 # Browser-automation scratch output
 .playwright-mcp/
+# Screenshots taken while driving the app. One of these reached a commit via `git add -A` and
+# shipped in the repo root; the repo has no business holding loose images.
+/*.png
+/*.jpg
+/*.webp
 
 # Local-only development process records (specs, plans, working notes) — never tracked
 docs/superpowers/
