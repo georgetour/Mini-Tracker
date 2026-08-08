@@ -323,15 +323,18 @@ document.addEventListener("alpine:init", () => {
           // label built from a value has to be built here rather than in the markup.
           checkLabel: p.isCurrent ? "Open" : "Check project",
           removeLabel: "Remove " + p.name,
-          // Pinned by a deploy override, so switching cannot take effect — the server refuses it
-          // too. Disabled with the banner above explaining why, rather than failing on click.
-          locked: this.pinned || p.isCurrent,
+          // Only a deploy override disables this, and only for the projects it stops you reaching.
+          // The current project's button always works — it opens the board.
+          locked: this.pinned && !p.isCurrent,
         }));
       }catch(e){ this.err.form = e.message || "The project list could not be loaded."; }
     },
 
     async selectProject(p){
-      if(p.isCurrent) return;
+      // Already open, so there is nothing to switch — but the button still has to do something,
+      // and the obvious something is showing you the board it names. A control that is a no-op is
+      // worse than no control.
+      if(p.isCurrent) return this.goBoard();
       try{
         this.config = await api("/api/projects/select", "POST", { path: p.backlogPath });
         await this.load();

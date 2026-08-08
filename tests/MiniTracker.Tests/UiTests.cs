@@ -140,6 +140,22 @@ public class UiTests(UiFixture fx)
     }
 
     [Fact]
+    public async Task Open_on_the_current_project_shows_its_board_rather_than_doing_nothing()
+    {
+        // It shipped disabled: a button labelled "Open" that could not be pressed. A control with
+        // no effect is worse than no control, because it reads as the app ignoring you.
+        var (page, _) = await fx.NewPageAsync();
+        await page.GotoAsync($"{fx.BaseUrl}/projects");
+
+        var open = page.Locator(".projrow.on .projacts .btn");
+        await Assertions.Expect(open).ToBeEnabledAsync();
+
+        await open.ClickAsync();
+        await Assertions.Expect(page).ToHaveURLAsync($"{fx.BaseUrl}/");
+        await Assertions.Expect(page.Locator(".story-row").First).ToBeVisibleAsync();
+    }
+
+    [Fact]
     public async Task Clicking_a_project_row_does_not_switch_project()
     {
         // Switching reloads the whole board, which is too much to happen from a stray tap on a

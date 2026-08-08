@@ -531,6 +531,13 @@ button.rel-head{border-top:none;border-right:none;cursor:pointer}
 .btn.ghost:hover{background:var(--surface2)}
 .btn.danger{background:var(--err);border:1px solid var(--err);color:#fff}
 .btn.danger:hover{filter:brightness(.92)}
+
+/* A disabled control has to look disabled. There was no rule for this at all, so every button
+   waiting on a save — and every one legitimately unavailable — looked exactly as pressable as the
+   rest, which reads as the app ignoring the click. */
+.btn:disabled,.actbtn:disabled,.iconbin:disabled{opacity:.45;cursor:not-allowed}
+.btn:disabled:hover,.actbtn:disabled:hover,.iconbin:disabled:hover{filter:none;background:inherit;
+  border-color:var(--border);color:inherit}
 .btn.sm{padding:5px 12px;font-size:12.5px}
 .btn.ghost.sm{color:var(--brand)}
 .btn.ghost.sm:hover{border-color:var(--brand)}
