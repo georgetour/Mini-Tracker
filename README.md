@@ -12,12 +12,6 @@ away — no save button, no database, no account.
 It builds, starts, and opens on a demo backlog of 5 epics and 24 stories that you can edit freely.
 Takes about a minute the first time. Needs a GitHub account, and runs on your own Codespaces quota.
 
-![The board](docs/screenshots/board.png)
-
-Responsive down to 320px — the same board on a phone, with the destinations moved to a bottom bar:
-
-<img src="docs/screenshots/mobile.png" alt="On a narrow screen" width="300">
-
 ## Setup
 
 **You need one thing to install:** [.NET 9 or higher](https://dotnet.microsoft.com/download).
@@ -293,22 +287,6 @@ node tests/perf/drive.js http://localhost:5249 300
 ```bash
 dotnet test
 ```
-
-## Roadmap
-
-**Next release — v1.0**, after testing and confirmation.
-
-- Dockerfile, for deploying it to a container host — and for trying it without leaving anything installed
-- A devcontainer, so it opens straight in GitHub Codespaces
-
-**Later, if people find it useful.**
-
-- User management, for teams sharing one backlog
-- A self-hosted mode with authentication
-
-Both of those are real work rather than a promise: multiple users means solving concurrent writes
-first, and an account system means holding credentials that a local tool never has to. They're worth
-doing if there's demand, and not worth doing on a guess.
 
 ---
 

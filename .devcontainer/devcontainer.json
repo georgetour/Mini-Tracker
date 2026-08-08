@@ -13,19 +13,23 @@
     }
   },
 
-  // Bind to every interface, not just loopback. Inside a container "localhost" is the container,
-  // and the port forwarder is the classic thing that then silently fails to see the app.
   "containerEnv": {
-    "ASPNETCORE_URLS": "http://0.0.0.0:5249",
     "DOTNET_NOLOGO": "true"
   },
 
-  "postCreateCommand": "dotnet restore",
+  // Only the app: restoring the solution also pulls the test project's Playwright and xunit
+  // packages, which nobody opening a Codespace to look at the board needs.
+  "postCreateCommand": "dotnet restore src/MiniTracker.Api",
 
+  // --urls on the command line, not ASPNETCORE_URLS in the environment. `dotnet run` applies
+  // launchSettings.json, whose applicationUrl is http://localhost:5249, and that overrides the
+  // ambient variable — so the app bound loopback only and the port forwarder had nothing to see.
+  // Verified by curling the container's own IP rather than localhost, which succeeds either way.
+  //
   // Runs on every attach, so reopening the Codespace brings the board back rather than an editor
   // with nothing running. First launch lands on the demo backlog: nothing is configured, so the
   // app materialises templates/ into a real, writable copy.
-  "postAttachCommand": "dotnet run --project src/MiniTracker.Api",
+  "postAttachCommand": "dotnet run --project src/MiniTracker.Api --urls http://0.0.0.0:5249",
 
   "customizations": {
     "vscode": {
