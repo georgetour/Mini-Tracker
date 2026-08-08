@@ -9,10 +9,14 @@
   "portsAttributes": {
     "5249": {
       "label": "Mini Tracker",
-      // openPreview, not openBrowser: opening a new tab is a popup, and browsers block those — so
-      // a visitor was left looking at an editor and a README with no sign the app was running.
-      // A preview opens as a pane inside the editor, which nothing can block.
-      "onAutoForward": "openPreview"
+      // notify, because the other two both fail here and each failure was observed:
+      //   openBrowser  asks for a new tab, and browsers block programmatic popups — the visitor got
+      //                an editor and a README with no sign the app was running.
+      //   openPreview  renders in an iframe, and Program.cs sends frame-ancestors 'none', so the
+      //                pane can never display the page however long you wait or refresh.
+      // notify shows a button. Clicking it is a user gesture, which nothing blocks, and it opens a
+      // real tab where the frame-ancestors rule does not apply.
+      "onAutoForward": "notify"
     }
   },
 

@@ -5,12 +5,16 @@ A minimal Jira/Azure-DevOps-style backlog tracker, built around UI/UX simplicity
 It's a small web board over plain files in your project. Click a status and it's saved straight
 away — no save button, no database, no account.
 
-**Try it in your browser, nothing to install:**
+**Run it yourself without installing .NET:**
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/georgetour/Mini-Tracker)
 
-It builds, starts, and opens on a demo backlog of 5 epics and 24 stories that you can edit freely.
-Takes about a minute the first time. Needs a GitHub account, and runs on your own Codespaces quota.
+This opens VS Code in your browser, on a cloud machine with .NET already installed, and starts Mini
+Tracker on a demo backlog of 5 epics and 24 stories you can edit freely. A notification appears with
+an **Open in Browser** button — that is the board.
+
+It is a development environment rather than a preview: it needs a GitHub account, uses your
+Codespaces quota, and the first start takes a few minutes while it builds.
 
 ## Setup
 

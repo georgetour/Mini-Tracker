@@ -76,13 +76,30 @@ public class DevcontainerTests
     }
 
     [Fact]
-    public void The_port_is_opened_inside_the_editor_rather_than_as_a_popup()
+    public void The_forwarded_port_is_offered_as_a_button_rather_than_opened_automatically()
     {
-        // openBrowser asks for a new tab, which browsers block — leaving an editor and a README
-        // with no sign the app was running. A preview pane cannot be blocked.
+        // Both alternatives were tried and both failed in a real Codespace.
+        //
+        //   openBrowser  asks for a new tab; browsers block programmatic popups, so a visitor was
+        //                left with an editor and a README and no sign the app was running.
+        //   openPreview  renders in an iframe, and the app sends frame-ancestors 'none' — so the
+        //                pane shows a broken page no matter how many times it is refreshed.
+        //
+        // notify puts a button in front of the user. Clicking it is a gesture no blocker
+        // interferes with, and it opens a real tab, where frame-ancestors does not apply.
         var attrs = Config().RootElement.GetProperty("portsAttributes").GetProperty("5249");
 
-        Assert.Equal("openPreview", attrs.GetProperty("onAutoForward").GetString());
+        Assert.Equal("notify", attrs.GetProperty("onAutoForward").GetString());
+    }
+
+    [Fact]
+    public void The_app_still_forbids_being_framed()
+    {
+        // The reason openPreview cannot be used. If this header is ever relaxed, the choice above
+        // is worth revisiting — and if it is relaxed by accident, this says so.
+        var program = File.ReadAllText(Path.Combine(Root(), "src", "MiniTracker.Api", "Program.cs"));
+
+        Assert.Contains("frame-ancestors 'none'", program);
     }
 
     [Fact]
