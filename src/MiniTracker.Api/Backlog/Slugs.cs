@@ -18,7 +18,10 @@ public static class Slugs
     /// that belongs to the Configure page, so it is given its number instead.</summary>
     private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
     {
-        "api", "configure", "add-epic", "add-story", "edit-epic", "releases",
+        // Every literal route Program.cs answers on. "edit-story" was missing, so an epic with that
+        // title would have shadowed the form page — the exact collision this list exists to stop.
+        "api", "configure", "projects", "releases",
+        "add-epic", "add-story", "add-project", "remove-project", "edit-epic", "edit-story",
         "uploads", "vendor", "index.html", "app.js", "app.css", "favicon.ico",
     };
 

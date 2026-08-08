@@ -36,9 +36,11 @@ const ACTIVITY = { "In Progress":5, "Vendor Test":4, "Under Review":3, "Refined"
 /** Form pages, by URL. Everything else is a board view, which has its own URL shape — see
  *  routePath() and readUrl(). Every screen is addressable, so the breadcrumb, the address bar and
  *  the browser's back button always agree with each other. */
-const PAGES = { "/configure":"configure", "/add-epic":"add-epic", "/add-story":"add-story",
+const PAGES = { "/configure":"configure", "/projects":"projects", "/add-project":"add-project",
+                "/remove-project":"remove-project", "/add-epic":"add-epic", "/add-story":"add-story",
                 "/edit-epic":"edit-epic", "/edit-story":"edit-story" };
-const PATH_FOR = { configure:"/configure", "add-epic":"/add-epic", "add-story":"/add-story",
+const PATH_FOR = { configure:"/configure", projects:"/projects", "add-project":"/add-project",
+                   "remove-project":"/remove-project", "add-epic":"/add-epic", "add-story":"/add-story",
                    "edit-epic":"/edit-epic", "edit-story":"/edit-story" };
 
 const pct = (a, b) => (b === 0 ? 0 : Math.round((a / b) * 100));
@@ -263,6 +265,9 @@ document.addEventListener("alpine:init", () => {
     releaseTag: null,
     editingEpic: null,
     seedEpic: null,          // which epic the add-story form should preselect, if reached from one
+    projects: [],            // every remembered project, current one marked; loaded with the page
+    pinned: false,           // a deploy-time BacklogPath override is fixing which backlog is used
+    removing: { name:"", backlogPath:"" },   // the project the remove page is confirming
 
     winWidth: window.innerWidth,
     sidebarCollapsed: false,
@@ -301,6 +306,81 @@ document.addEventListener("alpine:init", () => {
     async load(){
       this.board = decorate(await api("/api/board"));
       if(!this.expanded.length) this.expanded = this.board.epics.map(e => e.number);
+    },
+
+    /**
+     * Projects are pairs of paths the app remembers. Switching one re-reads the board from the
+     * newly current backlog — nothing is copied, and each project's files stay where they are,
+     * beside the code they describe.
+     */
+    async loadProjects(){
+      try{
+        const res = await api("/api/projects");
+        this.pinned = !!res.pinned;
+        this.projects = (res.projects || []).map(p => Object.assign({}, p, {
+          rowClass: p.isCurrent ? "on" : (p.missing ? "gone" : ""),
+          // Precomputed: Alpine's CSP build evaluates property reads and method calls only, so a
+          // label built from a value has to be built here rather than in the markup.
+          checkLabel: p.isCurrent ? "Open" : "Check project",
+          removeLabel: "Remove " + p.name,
+          // Pinned by a deploy override, so switching cannot take effect — the server refuses it
+          // too. Disabled with the banner above explaining why, rather than failing on click.
+          locked: this.pinned || p.isCurrent,
+        }));
+      }catch(e){ this.err.form = e.message || "The project list could not be loaded."; }
+    },
+
+    async selectProject(p){
+      if(p.isCurrent) return;
+      try{
+        this.config = await api("/api/projects/select", "POST", { path: p.backlogPath });
+        await this.load();
+        this.goBoard();
+        this.toast("Switched to " + p.name);
+      }catch(e){ this.err.form = e.message || "That project could not be opened."; }
+    },
+
+    /**
+     * Removing asks you to type the project's name. The server checks it too — this endpoint is
+     * reachable without the UI, and this is the one action on the page a person could regret.
+     */
+    async submitRemoveProject(){
+      this.err = {};
+      const typed = (this.form.confirmName || "").trim();
+      if(typed !== this.removing.name){
+        this.err.confirmName = "That doesn't match. Type " + this.removing.name + " exactly.";
+        return;
+      }
+
+      this.saving = true;
+      try{
+        this.config = await api("/api/projects/remove", "POST",
+          { path: this.removing.backlogPath, confirmName: typed });
+        await this.load();
+        this.goProjects();
+        this.toast("Project removed from the list");
+      }catch(e){ this.err.form = e.message || "That project could not be removed."; }
+      finally{ this.saving = false; }
+    },
+
+    async submitProject(){
+      this.err = {};
+      const backlog = (this.form.backlogPath || "").trim();
+      if(!backlog) this.err.backlogPath = "Enter the path to a BACKLOG.yaml file.";
+      else if(!/\.ya?ml$/i.test(backlog)) this.err.backlogPath = "That should be a .yaml file.";
+      if(this.err.backlogPath) return;
+
+      this.saving = true;
+      try{
+        this.config = await api("/api/projects", "POST",
+          { backlogPath: backlog, skillsPath: (this.form.skillsPath || "").trim() });
+        await this.load();
+        // Back to the list rather than the board: you have just changed what the list contains, and
+        // seeing the new entry marked Current is the confirmation that it worked.
+        this.goProjects();
+        this.toast("Project added");
+      }catch(e){ this.err.form = e.message || "That project could not be added."; }
+      finally{ this.saving = false; }
     },
 
     async loadConfig(){
@@ -387,6 +467,9 @@ document.addEventListener("alpine:init", () => {
         // there is nothing to edit, so fall back rather than showing an empty form.
         if(page === "edit-epic" && this.editingEpic === null) return this.resetToBoard();
         if(page === "edit-story" && !this.storyCode) return this.resetToBoard();
+        // Same reason: reached cold there is no project selected to remove, and a confirm form
+        // naming nothing is worse than no form.
+        if(page === "remove-project" && !this.removing.backlogPath) return this.resetToBoard();
         return this.openPage(page, false);
       }
       this.page = "";
@@ -437,7 +520,17 @@ document.addEventListener("alpine:init", () => {
       this.err = {};
       this.addOpen = false;
       this.drawerOpen = false;
-      if(page === "configure") this.form = { backlogPath: this.config.backlogPath || "", skillsPath: this.config.skillsPath || "" };
+      if(page === "configure") this.form = { backlogPath: this.config.backlogPath || "",
+                                             skillsPath: this.config.skillsPath || "",
+                                             projectName: this.projectName };
+      // The add form starts empty: it is for a project you do not have yet, so prefilling it with
+      // the current one invites overwriting the entry you are looking at.
+      //
+      // Loaded here rather than in goProjects, so a bookmark or a refresh of /projects shows the
+      // list too — routing to the page and arriving at it are different paths through this code.
+      if(page === "projects") this.loadProjects();
+      if(page === "add-project") this.form = { backlogPath:"", skillsPath:"" };
+      if(page === "remove-project") this.form = { confirmName:"" };
       if(page === "add-epic")  this.form = { title:"" };
       // seedEpic is set when Add is reached from inside an epic, so the dropdown already names the
       // epic you were looking at rather than the first one on the board.
@@ -469,6 +562,9 @@ document.addEventListener("alpine:init", () => {
     goBoard(push){ this.show("board", push); },
     goReleases(push){ this.show("releases", push); },
     goConfigure(){ this.openPage("configure"); },
+    goProjects(){ this.openPage("projects"); },
+    goAddProject(){ this.openPage("add-project"); },
+    goRemoveProject(p){ this.removing = p; this.openPage("remove-project"); },
     goAddEpic(){ this.openPage("add-epic"); },
     goAddStory(){ this.openPage("add-story"); },
     goAddStoryHere(){ this.seedEpic = this.epicNumber; this.openPage("add-story"); },
@@ -1041,6 +1137,10 @@ document.addEventListener("alpine:init", () => {
       try{
         if(backlog) this.config = await api("/api/config/backlog", "POST", { path: backlog });
         if(skills)  this.config = await api("/api/config/skills",  "POST", { path: skills });
+        // After the paths, so a rename lands on the backlog you just pointed at rather than the
+        // one you were leaving.
+        const name = (this.form.projectName || "").trim();
+        if(name && name !== this.projectName) this.config = await api("/api/config/name", "POST", { name });
         if(file){
           const fd = new FormData();
           fd.append("logo", file);
@@ -1057,6 +1157,10 @@ document.addEventListener("alpine:init", () => {
     },
 
     /* ------------------------------------------------------------- logo -- */
+    /** The board's own `project:` value. Falls back to the product name so the header is never
+     *  empty — on first load the board has not arrived yet. */
+    get projectName(){ return (this.board && this.board.project) || "Mini Tracker"; },
+
     get hasLogo(){ return !!this.config.logoPath; },
     // The filename is stable, so without a cache-buster the browser keeps showing the old image.
     get logoSrc(){ return this.config.logoPath + "?v=" + this.logoStamp; },

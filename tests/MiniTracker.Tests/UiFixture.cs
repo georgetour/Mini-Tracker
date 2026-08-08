@@ -64,6 +64,27 @@ public sealed class UiFixture : IAsyncLifetime
         return (page, errors);
     }
 
+    /// <summary>A path for a project that does not exist yet — adding it should create the backlog
+    /// from the template, which is the behaviour Configure already has for a single project.</summary>
+    public string UncreatedProjectPath => Path.Combine(_root, "second", "BACKLOG.yaml");
+
+    /// <summary>The project every other test expects to be open.</summary>
+    public string PrimaryBacklogPath => Path.Combine(_root, "BACKLOG.yaml");
+
+    /// <summary>Switches back to the primary project. One app serves the whole collection, so a
+    /// test that changes which project is open has to put it back — otherwise it decides what
+    /// every test after it sees.</summary>
+    public async Task UsePrimaryProjectAsync()
+    {
+        using var http = new HttpClient();
+        var body = new StringContent(
+            System.Text.Json.JsonSerializer.Serialize(new { path = PrimaryBacklogPath }),
+            System.Text.Encoding.UTF8, "application/json");
+
+        var res = await http.PostAsync($"{BaseUrl}/api/projects/select", body);
+        res.EnsureSuccessStatusCode();
+    }
+
     /// <summary>Uploads a logo through the app's own endpoint, so the logo-set state is reached the
     /// way a person reaches it rather than by writing config behind the app's back.</summary>
     public async Task SetLogoAsync()
@@ -122,6 +143,7 @@ public sealed class UiFixture : IAsyncLifetime
         // backlog and logo the developer happens to have configured, and pass or fail by machine.
         var dll = Path.Combine(AppContext.BaseDirectory, "MiniTracker.Api.dll");
         var contentRoot = Path.Combine(_root, "app");
+        Directory.CreateDirectory(contentRoot);
         CopyDirectory(Path.Combine(FindRepoPath(Path.Combine("src", "MiniTracker.Api")), "wwwroot"),
                       Path.Combine(contentRoot, "wwwroot"));
 
@@ -131,11 +153,21 @@ public sealed class UiFixture : IAsyncLifetime
             RedirectStandardError = true,
             UseShellExecute = false,
         };
+        // Seeded through tracker.config.json rather than --BacklogPath. A deploy-time override
+        // always wins over configuration, which would pin the app and make project switching a
+        // no-op — so driving it that way would test a mode nobody runs interactively.
+        File.WriteAllText(Path.Combine(contentRoot, "tracker.config.json"),
+            System.Text.Json.JsonSerializer.Serialize(new
+            {
+                BacklogPath = Path.Combine(_root, "BACKLOG.yaml"),
+                SkillsPath = Path.Combine(_root, "skills"),
+                LogoPath = (string?)null,
+                IsDemo = false,
+            }));
+
         psi.ArgumentList.Add(dll);
         psi.ArgumentList.Add($"--urls={BaseUrl}");
         psi.ArgumentList.Add($"--contentRoot={contentRoot}");
-        psi.ArgumentList.Add($"--BacklogPath={Path.Combine(_root, "BACKLOG.yaml")}");
-        psi.ArgumentList.Add($"--SkillsPath={Path.Combine(_root, "skills")}");
 
         var p = Process.Start(psi) ?? throw new InvalidOperationException("Could not start the app.");
         p.BeginOutputReadLine();

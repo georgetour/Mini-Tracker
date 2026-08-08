@@ -78,8 +78,50 @@ main{flex:1;min-width:0;padding:22px 24px 60px}
 .hwrap{max-width:1440px;margin:0 auto;padding:0 20px;height:56px;display:flex;align-items:center;gap:14px}
 /* The product name shrinks before it disappears — a top bar with a lone icon at each end and a
    void between them reads as broken rather than minimal. */
-.app-name{color:#fff;font-size:16px;font-weight:600;letter-spacing:.01em;white-space:nowrap;
+/* A label, not a control: it says which board you are on. Switching happens on the Projects page. */
+.app-name{display:inline-flex;align-items:center;gap:8px;
+  color:#fff;font-size:16px;font-weight:600;letter-spacing:.01em;white-space:nowrap;
   min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* The first run opens a demo backlog named "Acme App" — without this the product appears to be
+   called that. */
+.demo-chip{flex:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;padding:2px 8px;
+  font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+
+/* ---------------------------------------------------------------- projects --- */
+.projlist{display:flex;flex-direction:column;gap:8px;max-width:1000px;margin-bottom:28px}
+.projrow{display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:11px;
+  background:var(--surface);padding:10px 12px}
+.projrow.on{border-color:var(--brand);background:var(--st-prog-bg)}
+.projrow.gone{border-style:dashed}
+.projmain{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0}
+.projacts{display:flex;align-items:center;gap:8px;flex:none}
+/* Destructive, so it reads as destructive on hover rather than looking like every other icon. */
+.iconbin{display:flex;align-items:center;justify-content:center;width:34px;height:34px;flex:none;
+  border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer}
+.iconbin:hover{border-color:var(--err);color:var(--err);background:var(--st-hold-bg,var(--surface2))}
+.iconbin:focus-visible{outline:2px solid var(--err);outline-offset:1px}
+.removepath{margin:0 0 20px;max-width:1000px}
+.strong{font-weight:700;color:var(--text)}
+.projhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.projname{font-size:14px;font-weight:600}
+/* Which project is open, said in words. Colour alone is not a label. */
+.projbadge{flex:none;background:var(--brand);color:#fff;border-radius:999px;padding:2px 9px;
+  font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+/* The path wraps rather than truncating — it is the only thing distinguishing two projects with
+   the same name, so hiding half of it defeats the row. */
+.projpath{font-size:11.5px;color:var(--muted);word-break:break-all;overflow-wrap:anywhere}
+.projmissing{font-size:11.5px;color:var(--danger,#b42318);font-weight:600}
+/* Two notes, two meanings: pinnote explains why switching is off, safenote reassures before a
+   destructive-looking action. Same shape, deliberately not the same class. */
+.pinnote,.safenote{max-width:1000px;margin:0 0 16px;padding:10px 12px;border:1px solid var(--border);
+  border-left:3px solid var(--brand);border-radius:9px;background:var(--surface2);
+  font-size:12.5px;color:var(--muted)}
+.safenote{border-left-color:var(--ok);margin-bottom:14px}
+.safenote strong{color:var(--text)}
+.page-sub2{margin:0 0 14px;font-size:15px;font-weight:700}
+.linkish{background:none;border:none;padding:0;color:var(--brand);font-family:inherit;font-size:inherit;
+  cursor:pointer;text-decoration:underline}
+
 .hbtn{display:flex;align-items:center;gap:7px;background:transparent;border:1px solid rgba(255,255,255,.35);
   color:rgba(255,255,255,.92);border-radius:8px;padding:0 12px;height:34px;flex:none;
   font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap}
@@ -450,6 +492,9 @@ button.rel-head{border-top:none;border-right:none;cursor:pointer}
 .field label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
   color:var(--faint);margin-bottom:6px}
 .field label .opt{font-weight:500;letter-spacing:0;text-transform:none;opacity:.8}
+/* Labels are uppercased, but a value you have to type back exactly must be shown exactly — or the
+   confirm label reads "TYPE ACME APP" and you type the wrong thing and are told you are wrong. */
+.field label .strong{letter-spacing:0;text-transform:none}
 .field input,.field select{width:100%;font-family:inherit;font-size:14px;color:var(--text);
   background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
 .field input:focus-visible,.field select:focus-visible{outline:2px solid var(--brand);outline-offset:1px;
@@ -564,7 +609,51 @@ dialog .err{margin:0 0 12px;font-size:13px;font-weight:600;color:var(--err);
   /* The top bar is identity only: logo, name, theme. Every action moves to the bottom bar — and
      the drawer goes with them, because the bottom bar already reaches both destinations and the
      Overview lists the epics. Two ways to the same two places is one way too many. */
-  #btnConfigure,#btnSync,#btnStage,#hamburger,#sidebar,#scrim{display:none}
+  /* The project name in the header is the way to Projects on a phone, which keeps the bottom bar
+     at five destinations rather than cramming in a sixth. */
+  #btnConfigure,#btnSync,#btnStage,#btnProjects,#hamburger,#sidebar,#scrim{display:none}
+  .app-name{font-size:16px}
+  /* Stack so a long path stays readable instead of squeezing the actions off the edge. */
+  .projrow{flex-direction:column;align-items:stretch;gap:12px}
+  .projacts{justify-content:flex-start}
+  .iconbin{width:44px;height:44px}
+
+  /* ---- type scale -------------------------------------------------------------------------
+     The sizes above are desktop sizes, and px does not care how big the screen is: a 10.5px
+     label is 10.5px on a 27" monitor and on a 6" phone held at arm's length. Everything a
+     phone is actually used to read is raised here.
+
+     Form controls go to 16px. On Android that is simply a comfortable touch target; on iOS
+     Safari it is also the threshold below which focusing an input zooms the whole page.        */
+  body{font-size:15px}
+
+  .field input,.field select,.editor,.editor.short{font-size:16px}
+  .field label{font-size:14px}
+  .hint,.field-err,.page-sub,.pathnow,.pathnow .mono{font-size:13.5px}
+
+  .row-name{font-size:15px}
+  .row-code,.row-ctx{font-size:13px}
+  .crumb,.crumb-link,.crumb-cur{font-size:13.5px}
+  .empty,.none,.none.row{font-size:14px}
+  .epic-name{font-size:19px}
+  .epic-count,.rel-count{font-size:13.5px}
+  .chip.row-badge,.chip.sm{font-size:13px}
+  .vtag{font-size:12px}
+
+  .projname{font-size:16px}
+  .projpath{font-size:13px}
+  .projbadge{font-size:11px}
+  .page-title{font-size:24px}
+
+  /* Sidebar text is read in the drawer at this width, so it gets the same treatment. */
+  .sb-epic .t{font-size:15px}
+  .sb-epic .sub,.sb-story .code{font-size:12px}
+  .sb-story .t{font-size:14px}
+  .sb-nav{font-size:15px}
+
+  /* Comfortable targets. 44px is the size a fingertip actually hits reliably. */
+  .btn,.actbtn,.mnav,.projpick{min-height:44px}
+  .rowdel,.mt-open{min-height:40px}
   /* The add menu is a child of .addwrap, so hiding the wrapper hid the menu with it and the bottom
      bar's + had nothing to open — display:none removes the whole subtree, and the fixed position
      below cannot escape it. Hide the pill instead, and let the wrapper stop being a box at all so

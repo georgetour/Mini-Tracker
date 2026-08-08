@@ -3,9 +3,31 @@ using MiniTracker.Api.Backlog;
 
 namespace MiniTracker.Api.Services;
 
-/// <summary>Logo/backlog/skills paths the UI edits at runtime. Nullable — an unset field just means
-/// "not configured yet."</summary>
-public sealed record TrackerConfig(string? BacklogPath, string? SkillsPath, string? LogoPath, bool IsDemo);
+/// <summary>One remembered project: where its backlog is, the folder its story folders sit in, and
+/// its own logo. Nothing is copied or moved — a project is a set of paths, so each backlog stays
+/// beside the code it describes.</summary>
+public sealed record TrackerProject(string BacklogPath, string? SkillsPath, string? LogoPath = null);
+
+/// <summary>
+/// Logo/backlog/skills paths the UI edits at runtime. Nullable — an unset field just means
+/// "not configured yet."
+///
+/// BacklogPath and SkillsPath remain *the current project*, unchanged, so everything that resolves
+/// a path still reads exactly these two fields. Projects is a remembered list beside them, and a
+/// config written before it existed simply has none — see <see cref="TrackerConfigService.Projects"/>.
+/// </summary>
+public sealed record TrackerConfig(string? BacklogPath, string? SkillsPath, string? LogoPath, bool IsDemo,
+                                   IReadOnlyList<TrackerProject>? Projects = null);
+
+/// <param name="Name">From the backlog's own `project:` field, so it can never drift from the file.</param>
+/// <param name="Missing">The backlog file is not there — shown rather than hidden, because a moved
+/// folder should be visible instead of silently producing an empty board.</param>
+public sealed record ProjectView(string BacklogPath, string? SkillsPath, string Name, bool IsCurrent, bool Missing);
+
+/// <param name="Pinned">A deploy-time BacklogPath override is set. It always wins over configuration,
+/// so switching would change the config and change nothing you can see — the UI says so instead of
+/// offering an action that does nothing.</param>
+public sealed record ProjectList(IReadOnlyList<ProjectView> Projects, bool Pinned);
 
 /// <summary>
 /// Read/write gateway over the local, gitignored tracker.config.json. Re-reads from disk on every
@@ -119,12 +141,216 @@ public sealed class TrackerConfigService(string configPath)
         return full;
     }
 
-    /// <summary>Sets the logo path, or clears it when <paramref name="webPath"/> is null.</summary>
+    // ---------- projects ----------
+
+    /// <summary>
+    /// Every remembered project, with the one actually in use marked.
+    ///
+    /// Two things are folded in so the page always shows what you are looking at. A config written
+    /// before projects existed has no list, so its configured backlog appears as a single entry —
+    /// an upgrade shows the project you already had rather than nothing. And a deploy-time override
+    /// is never persisted, so without including it the board would show a backlog the list did not
+    /// contain.
+    /// </summary>
+    /// <param name="inUse">The path actually resolved for this request, override included.</param>
+    public IReadOnlyList<ProjectView> Projects(string? inUse = null)
+    {
+        var cfg = Load();
+        var current = string.IsNullOrWhiteSpace(inUse) ? cfg.BacklogPath : inUse;
+        var known = (cfg.Projects ?? []).ToList();
+
+        if (!string.IsNullOrWhiteSpace(cfg.BacklogPath) && !known.Any(p => SamePath(p.BacklogPath, cfg.BacklogPath)))
+            known.Insert(0, new TrackerProject(cfg.BacklogPath, cfg.SkillsPath));
+
+        if (!string.IsNullOrWhiteSpace(current) && !known.Any(p => SamePath(p.BacklogPath, current)))
+            known.Insert(0, new TrackerProject(current, cfg.SkillsPath));
+
+        return known.Select(p => new ProjectView(
+            p.BacklogPath,
+            p.SkillsPath,
+            NameOf(p.BacklogPath),
+            SamePath(p.BacklogPath, current),
+            !File.Exists(p.BacklogPath))).ToList();
+    }
+
+    /// <summary>Remembers a project and switches to it, creating the backlog from the template if it
+    /// is not there yet — the same rule Configure already follows for a single project.</summary>
+    public TrackerConfig AddProject(string backlogPath, string? skillsPath)
+    {
+        lock (_lock)
+        {
+            var backlog = ValidateBacklogPath(backlogPath);
+            var skills = string.IsNullOrWhiteSpace(skillsPath) ? null : ValidateSkillsPath(skillsPath);
+
+            if (!File.Exists(backlog))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(backlog)!);
+                File.Copy(TemplateLocator.Find("BACKLOG.template.yaml"), backlog);
+                NameAfterItsFolder(backlog);
+            }
+
+            var cfg = Load();
+            var list = Existing(cfg).Where(p => !SamePath(p.BacklogPath, backlog)).ToList();
+            list.Add(new TrackerProject(backlog, skills));
+
+            // A new project starts with no logo — the previous project's would otherwise appear to
+            // belong to it.
+            var next = cfg with { Projects = list, BacklogPath = backlog, SkillsPath = skills,
+                                  LogoPath = null, IsDemo = false };
+            Save(next);
+            return next;
+        }
+    }
+
+    /// <summary>Switches to an already-remembered project. Refuses an unknown path rather than
+    /// quietly adding it, so this endpoint cannot be used to point the app anywhere at all.</summary>
+    public TrackerConfig SelectProject(string backlogPath)
+    {
+        lock (_lock)
+        {
+            var cfg = Load();
+            var match = Existing(cfg).FirstOrDefault(p => SamePath(p.BacklogPath, backlogPath))
+                ?? throw new BacklogValidationException("That project isn't in the list. Add it first.");
+
+            // LogoPath follows the project, so the header shows the branding of the board you are
+            // actually looking at rather than whichever logo was uploaded last.
+            var next = cfg with { Projects = Existing(cfg), BacklogPath = match.BacklogPath,
+                                  SkillsPath = match.SkillsPath, LogoPath = match.LogoPath, IsDemo = false };
+            Save(next);
+            return next;
+        }
+    }
+
+    /// <summary>
+    /// Removes a project from the list. Files are never touched — the backlog and its story folders
+    /// stay exactly where they are, and adding the same path again brings it straight back.
+    ///
+    /// <paramref name="confirmName"/> must match the project's name. The browser asks for it too,
+    /// but this is the guarantee: the endpoint is reachable without the UI, and this is the one
+    /// operation here a person could regret.
+    /// </summary>
+    public TrackerConfig RemoveProject(string backlogPath, string confirmName)
+    {
+        lock (_lock)
+        {
+            var cfg = Load();
+            var match = Existing(cfg).FirstOrDefault(p => SamePath(p.BacklogPath, backlogPath))
+                ?? throw new BacklogValidationException("That project isn't in the list.");
+
+            if (!string.Equals((confirmName ?? "").Trim(), NameOf(match.BacklogPath), StringComparison.Ordinal))
+                throw new BacklogValidationException("The name you typed doesn't match this project.");
+
+            var list = Existing(cfg).Where(p => !SamePath(p.BacklogPath, backlogPath)).ToList();
+
+            // Removing the one you are looking at has to leave you somewhere: the next remaining
+            // project, or nothing configured — which falls through to the demo on the next read.
+            var wasCurrent = SamePath(cfg.BacklogPath, backlogPath);
+            var fallback = list.FirstOrDefault();
+            var next = wasCurrent
+                ? cfg with { Projects = list, BacklogPath = fallback?.BacklogPath,
+                             SkillsPath = fallback?.SkillsPath, LogoPath = fallback?.LogoPath }
+                : cfg with { Projects = list };
+
+            Save(next);
+            return next;
+        }
+    }
+
+    /// <summary>The stored list, with the current project folded in if it predates the list.</summary>
+    private static List<TrackerProject> Existing(TrackerConfig cfg)
+    {
+        var list = (cfg.Projects ?? []).ToList();
+        // Carries the top-level logo onto the synthesised entry, so a config written before projects
+        // existed keeps the logo it already had rather than losing it on first upgrade.
+        if (!string.IsNullOrWhiteSpace(cfg.BacklogPath) && !list.Any(p => SamePath(p.BacklogPath, cfg.BacklogPath)))
+            list.Insert(0, new TrackerProject(cfg.BacklogPath, cfg.SkillsPath, cfg.LogoPath));
+        return list;
+    }
+
+    /// <summary>
+    /// Renames a freshly-created backlog after the folder it was created in.
+    ///
+    /// Without this, every project made from the template is called "Acme App" — so a list of them
+    /// is a column of identical names distinguished only by path, which is exactly what the name is
+    /// there to avoid. Only ever applied to a file this method just created.
+    /// </summary>
+    private static void NameAfterItsFolder(string backlogPath)
+    {
+        var folder = Path.GetFileName(Path.GetDirectoryName(backlogPath));
+        if (string.IsNullOrWhiteSpace(folder)) return;
+
+        try
+        {
+            var board = YamlIndex.Parse(File.ReadAllText(backlogPath));
+            File.WriteAllText(backlogPath, YamlIndex.Write(board with { Project = folder }));
+        }
+        catch (Exception) { /* the template is still a valid backlog under its own name */ }
+    }
+
+    /// <summary>The backlog's own `project:` value, falling back to the folder name. Never throws —
+    /// a project whose file is broken still has to appear in the list so it can be fixed.</summary>
+    private static string NameOf(string backlogPath)
+    {
+        try
+        {
+            if (File.Exists(backlogPath))
+            {
+                var name = YamlIndex.Parse(File.ReadAllText(backlogPath)).Project;
+                if (!string.IsNullOrWhiteSpace(name)) return name;
+            }
+        }
+        catch (Exception) { /* unparseable is not a reason to hide it */ }
+
+        return Path.GetFileName(Path.GetDirectoryName(backlogPath)) ?? backlogPath;
+    }
+
+    /// <summary>Compares two paths the way the platform does — Windows ignores case, Linux does not,
+    /// which is the same reason PathSafety uses GetRelativePath rather than a string prefix.</summary>
+    private static bool SamePath(string? a, string? b) =>
+        !string.IsNullOrWhiteSpace(a) && !string.IsNullOrWhiteSpace(b)
+        && string.Equals(Path.GetFullPath(a), Path.GetFullPath(b),
+                         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    /// <summary>
+    /// Sets the current project's logo, or clears it when <paramref name="webPath"/> is null.
+    ///
+    /// Stored twice on purpose: on the project entry, because a logo belongs to the project rather
+    /// than to the app, and at the top level as "the logo in use right now" so the browser can keep
+    /// reading one field. Switching project refreshes the top-level copy from the entry.
+    /// </summary>
     public TrackerConfig SetLogoPath(string? webPath)
     {
-        var next = Load() with { LogoPath = webPath };
-        Save(next);
-        return next;
+        lock (_lock)
+        {
+            var cfg = Load();
+            var list = Existing(cfg)
+                .Select(p => SamePath(p.BacklogPath, cfg.BacklogPath) ? p with { LogoPath = webPath } : p)
+                .ToList();
+
+            var next = cfg with { LogoPath = webPath, Projects = list };
+            Save(next);
+            return next;
+        }
+    }
+
+    /// <summary>
+    /// Renames the current project by writing the backlog's own `project:` field.
+    ///
+    /// Written to the file, never stored in config: the name has one home, so it cannot drift from
+    /// what the board shows or from what another tool reading the backlog would see.
+    /// </summary>
+    public void SetProjectName(string backlogPath, string name)
+    {
+        name = (name ?? "").Trim();
+        if (name.Length == 0) throw new BacklogValidationException("Give the project a name.");
+        if (name.Length > 60) throw new BacklogValidationException("That name is too long (60 characters max).");
+        if (!File.Exists(backlogPath)) throw new BacklogValidationException("That backlog file is not there.");
+
+        lock (_lock)
+        {
+            var board = YamlIndex.Parse(File.ReadAllText(backlogPath));
+            File.WriteAllText(backlogPath, YamlIndex.Write(board with { Project = name }));
+        }
     }
 
     /// <summary>First-run bootstrap: materializes a live, writable demo backlog from the bundled

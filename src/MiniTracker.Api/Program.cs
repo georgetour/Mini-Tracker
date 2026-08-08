@@ -181,6 +181,61 @@ app.MapPost("/api/config/skills", (PathRequest r, TrackerConfigService cfg) =>
     catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
 });
 
+// Projects are remembered pairs of paths, nothing more. Adding one never copies or moves a backlog,
+// and removing one never deletes it — every one of these endpoints edits a list.
+// Passes the path actually resolved for this request, so a deploy-time override — which is never
+// written to config — still appears as the current project rather than leaving the page empty.
+app.MapGet("/api/projects", (TrackerConfigService cfg, BacklogService svc) =>
+    Results.Json(new ProjectList(cfg.Projects(svc.BacklogPath), !string.IsNullOrWhiteSpace(overridePath))));
+
+app.MapPost("/api/projects", (AddProjectRequest r, TrackerConfigService cfg) =>
+{
+    try { return Results.Json(cfg.AddProject(r.BacklogPath, r.SkillsPath)); }
+    catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
+    catch (IOException) { return Results.BadRequest("That file could not be created. Check the folder exists and is writable."); }
+    catch (UnauthorizedAccessException) { return Results.BadRequest("That location is not writable."); }
+});
+
+app.MapPost("/api/projects/select", (PathRequest r, TrackerConfigService cfg) =>
+{
+    // Refused rather than silently ineffective: with an override set, this would write the config
+    // and leave the board showing the pinned backlog, which reads as the app ignoring the click.
+    if (!string.IsNullOrWhiteSpace(overridePath))
+        return Results.BadRequest("This instance is pinned to one backlog by its deployment "
+                                + "configuration (BacklogPath). Remove that setting to switch projects.");
+
+    try { return Results.Json(cfg.SelectProject(r.Path)); }
+    catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
+});
+
+app.MapPost("/api/projects/remove", (RemoveProjectRequest r, TrackerConfigService cfg) =>
+{
+    try { return Results.Json(cfg.RemoveProject(r.Path, r.ConfirmName)); }
+    catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
+});
+
+// The name lives in the backlog's own `project:` field, so this rewrites the file rather than
+// storing a copy that could disagree with it.
+app.MapPost("/api/config/name", (NameRequest r, TrackerConfigService cfg, BacklogService svc) =>
+{
+    try
+    {
+        cfg.SetProjectName(svc.BacklogPath, r.Name);
+        return Results.Json(cfg.Load());
+    }
+    catch (BacklogValidationException e) { return Results.BadRequest(e.Message); }
+    catch (IOException) { return Results.BadRequest("That backlog file could not be written."); }
+    catch (UnauthorizedAccessException) { return Results.BadRequest("That backlog file is not writable."); }
+});
+
+/// <summary>A filename-safe stamp for one project, so two projects cannot share a logo file.</summary>
+static string LogoSlug(string? backlogPath)
+{
+    var full = Path.GetFullPath(backlogPath ?? "demo");
+    var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(full));
+    return Convert.ToHexString(bytes)[..12].ToLowerInvariant();
+}
+
 app.MapPost("/api/config/logo", async (HttpRequest req, TrackerConfigService cfg, IWebHostEnvironment env) =>
 {
     if (!req.HasFormContentType) return Results.BadRequest("Expected multipart/form-data");
@@ -196,7 +251,10 @@ app.MapPost("/api/config/logo", async (HttpRequest req, TrackerConfigService cfg
 
     var uploadsDir = Path.Combine(env.WebRootPath, "uploads");
     Directory.CreateDirectory(uploadsDir);
-    var savedName = "logo" + ext;
+
+    // Named after the project, not "logo.png" — with several projects a fixed name meant each
+    // upload silently replaced the last one's image while both configs still pointed at it.
+    var savedName = $"logo-{LogoSlug(cfg.Load().BacklogPath)}{ext}";
     await using (var stream = File.Create(Path.Combine(uploadsDir, savedName)))
         await file.CopyToAsync(stream);
 
@@ -299,6 +357,9 @@ IResult ShellOr404(bool exists) => Shell(exists ? StatusCodes.Status200OK : Stat
 app.MapGet("/", () => Shell());
 app.MapGet("/releases", () => Shell());
 app.MapGet("/configure", () => Shell());
+app.MapGet("/projects", () => Shell());
+app.MapGet("/add-project", () => Shell());
+app.MapGet("/remove-project", () => Shell());
 app.MapGet("/add-epic", () => Shell());
 app.MapGet("/add-story", () => Shell());
 app.MapGet("/edit-epic", () => Shell());
@@ -334,6 +395,9 @@ sealed record StatusRequest(string Status);
 sealed record TaskListRequest(List<TaskItem> Tasks);
 sealed record TestCaseListRequest(List<TestCase> TestCases);
 sealed record PathRequest(string Path);
+sealed record AddProjectRequest(string BacklogPath, string? SkillsPath);
+sealed record NameRequest(string Name);
+sealed record RemoveProjectRequest(string Path, string ConfirmName);
 sealed record AddEpicRequest(int Number, string Title);
 sealed record AddStoryRequest(int EpicNumber, string Code, string Title, string? Release, string? Description);
 sealed record SaveSkillRequest(string Path, string Content);
