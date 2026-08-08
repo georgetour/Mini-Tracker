@@ -187,9 +187,14 @@ trusting a number written here, which goes stale within a day):
 2. **Pagination** — measured at 1000 stories the board is ~35 ms server-side, but the browser still
    renders every row. An epic holding more than ~20–30 stories is a modelling smell rather than a
    scale problem, so page the board, not the epic.
-3. **Dockerfile** — for eventual container deployment (Linux). Note: `templates/` is found by walking
-   up from the working directory (same mechanism as `BacklogLocator`) — a container/publish build
-   must ensure `templates/` ships alongside the app, or this needs revisiting.
+
+**Not being built — decided, do not propose these again.** Mini Tracker stays a local tool: no
+hosting, no authentication, no public homepage, and no git-backed sync. Every one of those existed
+to reconcile a second copy of the backlog with the local one, and there is only ever one copy.
+A **Dockerfile** is off the list too — its purposes were deployment (cancelled) and running without
+installing .NET (the Codespaces badge), and a container boundary works against an app whose job is
+reaching arbitrary paths on the host. Reaching the board from a phone, if it is ever wanted, is
+`--urls http://0.0.0.0:5249` on the same wifi, or a VPN like Tailscale — not a deployment.
 
 ## Testing
 
