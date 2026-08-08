@@ -9,7 +9,10 @@
   "portsAttributes": {
     "5249": {
       "label": "Mini Tracker",
-      "onAutoForward": "openBrowser"
+      // openPreview, not openBrowser: opening a new tab is a popup, and browsers block those — so
+      // a visitor was left looking at an editor and a README with no sign the app was running.
+      // A preview opens as a pane inside the editor, which nothing can block.
+      "onAutoForward": "openPreview"
     }
   },
 
@@ -34,7 +37,10 @@
   //
   // First launch lands on the demo backlog: nothing is configured, so the app materialises
   // templates/ into a real, writable copy.
-  "postAttachCommand": "curl -sf -o /dev/null --max-time 2 http://localhost:5249/api/board || dotnet run --project src/MiniTracker.Api --urls http://0.0.0.0:5249",
+  // Prints the forwarded URL before starting, so there is always a visible, clickable way in even
+  // if the preview pane does not appear. In a Codespace those two variables are always set; run
+  // anywhere else they are empty and the line is simply skipped.
+  "postAttachCommand": "bash .devcontainer/start.sh",
 
   "customizations": {
     "vscode": {
